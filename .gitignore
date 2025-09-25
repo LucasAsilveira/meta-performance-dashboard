@@ -2,7 +2,7 @@
 data/raw/*.csv
 
 # Dados processados (gerados automaticamente)
-data/processed/*.csv
+data/raw/*.csv
 
 # Python
 __pycache__/
