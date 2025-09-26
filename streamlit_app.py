@@ -19,7 +19,7 @@ st.set_page_config(page_title="Meta Performance Dashboard", layout="wide")
 def load_data():
     """Carrega o dataset principal"""
     try:
-        caminho = os.path.join(PROJECT_ROOT, "meta-performance-dashboard/data/processed/meta_analysis_final_enriched.csv")
+        caminho = os.path.join(PROJECT_ROOT, "data/processed/meta_analysis_final_enriched.csv")
         df = pd.read_csv(caminho)
         # Ajustar atingimento_meta se necessário
         if df['atingimento_meta'].max() > 5:
@@ -34,7 +34,7 @@ def load_data():
 def load_berlinda():
     """Carrega o dataset da Berlinda"""
     try:
-        caminho = os.path.join(PROJECT_ROOT, "meta-performance-dashboard/data/processed/berlinda_prepared.csv")
+        caminho = os.path.join(PROJECT_ROOT, "data/processed/berlinda_prepared.csv")
         return pd.read_csv(caminho)
     except FileNotFoundError:
         st.error(f"Arquivo não encontrado: {caminho}")
