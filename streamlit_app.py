@@ -337,27 +337,29 @@ with tab2:
 
     # --- TABELA OPERACIONAL ---
     st.subheader("Tabela Operacional")
+
+    # Renomear para simplificar (opcional, mas recomendado)
+    df_display = df_berlinda_filtered.rename(columns={'faixa_prioridade': 'prioridade'})
+
     col_filt1, col_filt2 = st.columns(2)
     with col_filt1:
         filtro_status = st.multiselect(
             "Filtrar por Status",
-            options=df_berlinda_filtered['status_operacional'].unique(),
-            default=df_berlinda_filtered['status_operacional'].unique()
+            options=df_display['status_operacional'].unique(),
+            default=df_display['status_operacional'].unique()
         )
     with col_filt2:
         filtro_prioridade = st.multiselect(
             "Filtrar por Prioridade",
-            options=df_berlinda_filtered['prioridade'].unique(),
-            default=df_berlinda_filtered['prioridade'].unique()
+            options=df_display['prioridade'].unique(),
+            default=df_display['prioridade'].unique()
         )
 
-    # Aplicar filtros locais
-    df_tabela_filtrada = df_berlinda_filtered[
-        (df_berlinda_filtered['status_operacional'].isin(filtro_status)) &
-        (df_berlinda_filtered['prioridade'].isin(filtro_prioridade))
+    df_tabela_filtrada = df_display[
+        (df_display['status_operacional'].isin(filtro_status)) &
+        (df_display['prioridade'].isin(filtro_prioridade))
     ]
 
-    # Colunas expandidas
     col_order = [
         'listing', 'carteira', 'estado', 'status_operacional', 'prioridade',
         'faturamento_mes', 'meta', 'falta_meta',
@@ -365,16 +367,19 @@ with tab2:
         'to_listings', 'media_preco_disponivel',
         'score_normalizado'
     ]
-
-    # Verificar quais colunas existem no dataframe
     col_order = [col for col in col_order if col in df_tabela_filtrada.columns]
 
-    df_tabela_final = df_tabela_filtrada[col_order].sort_values(
-        ['prioridade', 'score_normalizado', 'dias_necessarios'],
-        ascending=[False, False, True]
-    )
+    # Ordenação correta
+    ordem_map = {"Crítico": 4, "Alta": 3, "Média": 2, "Baixa": 1}
+    df_tabela_filtrada = df_tabela_filtrada.copy()
+    df_tabela_filtrada['ordem'] = df_tabela_filtrada['prioridade'].map(ordem_map)
 
-    st.dataframe(df_tabela_final, use_container_width=True, height=500)
+    df_tabela_final = df_tabela_filtrada[col_order].sort_values(
+        ['ordem', 'score_normalizado', 'dias_necessarios'],
+        ascending=[False, False, True]
+    ).drop(columns=['ordem'], errors='ignore')
+
+st.dataframe(df_tabela_final, use_container_width=True, height=500)
 
     # Botão de exportação (só dos filtrados)
     @st.cache_data
