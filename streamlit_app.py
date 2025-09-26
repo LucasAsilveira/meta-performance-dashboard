@@ -476,10 +476,10 @@ with tab2:
     ordem_map = {"Crítico": 4, "Alta": 3, "Média": 2, "Baixa": 1}
     df_tabela_filtrada = df_tabela_filtrada.copy()
     df_tabela_filtrada['ordem'] = df_tabela_filtrada['faixa_prioridade'].map(ordem_map)
-    df_tabela_final = df_tabela_filtrada[col_order].sort_values(
-        ['ordem', 'score_normalizado', 'dias_necessarios'],
-        ascending=[False, False, True]
-    ).drop(columns=['ordem'], errors='ignore')
+    df_tabela_final = df_tabela_filtrada#[col_order].sort_values(
+    #    ['ordem', 'score_normalizado', 'dias_necessarios'],
+    #    ascending=[False, False, True]
+    #).drop(columns=['ordem'], errors='ignore')
 
     st.dataframe(df_tabela_final, use_container_width=True, height=500)
 
