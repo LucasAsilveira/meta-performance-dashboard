@@ -36,12 +36,6 @@ st.title("📊 Meta Performance Dashboard")
 df = load_data()
 df_berlinda = load_berlinda()
 
-# Mostrar informações de debug (opcional)
-with st.expander("🔍 Informações de Debug"):
-    st.write(f"Diretório do app: {APP_DIR}")
-    st.write(f"Diretório raiz: {PROJECT_ROOT}")
-    st.write(f"Arquivo principal carregado: {len(df)} linhas")
-    st.write(f"Arquivo Berlinda carregado: {len(df_berlinda)} linhas")
 
 # Verificar se os dados foram carregados
 if df.empty:
