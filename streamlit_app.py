@@ -4,36 +4,29 @@ import plotly.express as px
 import os
 import sys
 
-# Diretório onde o script está rodando
-CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
-# Diretório raiz do repositório (um nível acima)
-REPO_ROOT = os.path.dirname(CURRENT_DIR)
-
 @st.cache_data
 def load_data():
     """Carrega o dataset principal"""
     try:
-        caminho = os.path.join(REPO_ROOT, "meta_analysis_final_enriched.csv")
-        df = pd.read_csv(caminho)
+        # Os arquivos estão no mesmo diretório que o script!
+        df = pd.read_csv("meta_analysis_final_enriched.csv")
         if df['atingimento_meta'].max() > 5:
             df['atingimento_meta'] = df['atingimento_meta'] / 100
         return df
     except FileNotFoundError:
-        st.error(f"Arquivo não encontrado: {caminho}")
-        st.write(f"Diretório atual: {CURRENT_DIR}")
-        st.write(f"Raiz do repositório: {REPO_ROOT}")
-        st.write(f"Conteúdo da raiz: {os.listdir(REPO_ROOT)}")
+        st.error("Arquivo meta_analysis_final_enriched.csv não encontrado!")
+        st.write(f"Diretório atual: {os.getcwd()}")
+        st.write(f"Conteúdo da pasta: {os.listdir('.')}")
         return pd.DataFrame()
 
 @st.cache_data
 def load_berlinda():
     """Carrega o dataset da Berlinda"""
     try:
-        caminho = os.path.join(REPO_ROOT, "berlinda_prepared.csv")
-        return pd.read_csv(caminho)
+        return pd.read_csv("berlinda_prepared.csv")
     except FileNotFoundError:
-        st.error(f"Arquivo não encontrado: {caminho}")
-        st.write(f"Conteúdo da raiz: {os.listdir(REPO_ROOT)}")
+        st.error("Arquivo berlinda_prepared.csv não encontrado!")
+        st.write(f"Conteúdo da pasta: {os.listdir('.')}")
         return pd.DataFrame()
 
 # Título
