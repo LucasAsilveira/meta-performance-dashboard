@@ -379,7 +379,7 @@ with tab2:
         ascending=[False, False, True]
     ).drop(columns=['ordem'], errors='ignore')
 
-st.dataframe(df_tabela_final, use_container_width=True, height=500)
+    st.dataframe(df_tabela_final, use_container_width=True, height=500)
 
     # Botão de exportação (só dos filtrados)
     @st.cache_data
