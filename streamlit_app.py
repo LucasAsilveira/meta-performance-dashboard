@@ -402,6 +402,6 @@ with tab2:
     csv_berlinda = convert_df_berlinda(df_tabela_final)
     st.download_button("📥 Exportar Tabela Filtrada", csv_berlinda, "berlinda_filtrada.csv", "text/csv")
 
-
+#a
 # --- Rodapé ---
 st.caption(f"Total de listings exibidos: {len(df_filtered)} | Atualizado em {pd.Timestamp.now().strftime('%d/%m/%Y %H:%M')}")
