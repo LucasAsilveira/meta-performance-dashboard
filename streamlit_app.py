@@ -4,39 +4,36 @@ import plotly.express as px
 import os
 import sys
 
-# Obter o diretório raiz do projeto (um nível acima de streamlit_app)
-APP_DIR = os.path.dirname(os.path.abspath(__file__))
-PROJECT_ROOT = os.path.dirname(APP_DIR)
+# Diretório onde o script está rodando
+CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
+# Diretório raiz do repositório (um nível acima)
+REPO_ROOT = os.path.dirname(CURRENT_DIR)
 
-# Adicionar o diretório raiz ao path para importações futuras
-sys.path.insert(0, PROJECT_ROOT)
-
-# Configuração da página
-st.set_page_config(page_title="Meta Performance Dashboard", layout="wide")
-
-# --- Funções para carregar dados ---
 @st.cache_data
 def load_data():
     """Carrega o dataset principal"""
     try:
-        caminho = os.path.join(PROJECT_ROOT, "meta_analysis_final_enriched.csv")
+        caminho = os.path.join(REPO_ROOT, "meta_analysis_final_enriched.csv")
         df = pd.read_csv(caminho)
-        # Ajustar atingimento_meta se necessário
         if df['atingimento_meta'].max() > 5:
             df['atingimento_meta'] = df['atingimento_meta'] / 100
         return df
     except FileNotFoundError:
         st.error(f"Arquivo não encontrado: {caminho}")
+        st.write(f"Diretório atual: {CURRENT_DIR}")
+        st.write(f"Raiz do repositório: {REPO_ROOT}")
+        st.write(f"Conteúdo da raiz: {os.listdir(REPO_ROOT)}")
         return pd.DataFrame()
 
 @st.cache_data
 def load_berlinda():
     """Carrega o dataset da Berlinda"""
     try:
-        caminho = os.path.join(PROJECT_ROOT, "berlinda_prepared.csv")
+        caminho = os.path.join(REPO_ROOT, "berlinda_prepared.csv")
         return pd.read_csv(caminho)
     except FileNotFoundError:
         st.error(f"Arquivo não encontrado: {caminho}")
+        st.write(f"Conteúdo da raiz: {os.listdir(REPO_ROOT)}")
         return pd.DataFrame()
 
 # Título
