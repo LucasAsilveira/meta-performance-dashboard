@@ -236,7 +236,9 @@ with tab1:
 # =============== ABA 2: BERLINDA DETALHADA ===============
 with tab2:
     st.subheader("🎯 Dashboard da Berlinda")
-    st.caption("Análise tática dos imóveis entre 80–110% da meta, com foco em ação operacional.")   
+    st.caption("Análise tática dos imóveis entre 80–110% da meta, com foco em ação operacional.")  
+    # Filtrar só a Berlinda do df_filtered (já com filtros aplicados)
+    df_berlinda = df_filtered[df_filtered['grupo_criticidade'] == 'berlinda'].copy() 
 
     if df_berlinda_filtered.empty:
         st.warning("Nenhum imóvel na Berlinda com os filtros aplicados.")
