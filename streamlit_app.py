@@ -236,19 +236,130 @@ with tab1:
 # =============== ABA 2: BERLINDA DETALHADA ===============
 with tab2:
     st.subheader("🎯 Dashboard da Berlinda")
-    st.caption("Análise tática dos imóveis entre 80–110% da meta, com foco em ação operacional.")  
-    # Filtrar só a Berlinda do df_filtered (já com filtros aplicados)
-    df_berlinda = df_filtered[df_filtered['grupo_criticidade'] == 'berlinda'].copy() 
+    st.caption("Análise tática dos imóveis entre 80–110% da meta, com foco em ação operacional.")
 
-    if df_berlinda_filtered.empty:
+    # Filtrar só a Berlinda do df_filtered (já com filtros aplicados)
+    df_berlinda_raw = df_filtered[df_filtered['grupo_criticidade'] == 'berlinda'].copy()
+
+    if df_berlinda_raw.empty:
         st.warning("Nenhum imóvel na Berlinda com os filtros aplicados.")
         st.stop()
+
+    # --- ENRIQUECIMENTO DO DATAFRAME DA BERLINDA (em tempo real) ---
+    import numpy as np
+
+    # Garantir colunas numéricas
+    df_berlinda_raw['media_preco_disponivel'] = pd.to_numeric(df_berlinda_raw['media_preco_disponivel'], errors='coerce')
+    df_berlinda_raw['faturamento_mes'] = pd.to_numeric(df_berlinda_raw['faturamento_mes'], errors='coerce')
+    df_berlinda_raw['meta'] = pd.to_numeric(df_berlinda_raw['meta'], errors='coerce')
+    df_berlinda_raw['to_listings'] = pd.to_numeric(df_berlinda_raw['to_listings'], errors='coerce')
+    df_berlinda_raw['ocupacao_ainda_disponivel'] = pd.to_numeric(df_berlinda_raw['ocupacao_ainda_disponivel'], errors='coerce')
+
+    # Criar colunas base
+    df_berlinda_raw['dias_disponiveis'] = df_berlinda_raw['ocupacao_ainda_disponivel'].fillna(0).astype(int)
+    df_berlinda_raw['falta_meta'] = df_berlinda_raw['meta'] - df_berlinda_raw['faturamento_mes']
+
+    # Inicializar colunas
+    df_berlinda_raw['dias_necessarios'] = 0
+    df_berlinda_raw['potencial_max'] = df_berlinda_raw['faturamento_mes']
+    df_berlinda_raw['potencial_realista'] = df_berlinda_raw['faturamento_mes']
+
+    # Calcular só onde há dias disponíveis
+    mask_com_dias = df_berlinda_raw['dias_disponiveis'] > 0
+    df_berlinda_raw.loc[mask_com_dias, 'potencial_max'] = (
+        df_berlinda_raw.loc[mask_com_dias, 'faturamento_mes'] +
+        df_berlinda_raw.loc[mask_com_dias, 'dias_disponiveis'] * df_berlinda_raw.loc[mask_com_dias, 'media_preco_disponivel']
+    )
+    df_berlinda_raw.loc[mask_com_dias, 'potencial_realista'] = (
+        df_berlinda_raw.loc[mask_com_dias, 'faturamento_mes'] +
+        df_berlinda_raw.loc[mask_com_dias, 'to_listings'] *
+        df_berlinda_raw.loc[mask_com_dias, 'dias_disponiveis'] *
+        df_berlinda_raw.loc[mask_com_dias, 'media_preco_disponivel']
+    )
+
+    # Dias necessários (só se falta_meta > 0 e preço > 0)
+    mask_calc = (
+        mask_com_dias &
+        (df_berlinda_raw['falta_meta'] > 0) &
+        (df_berlinda_raw['media_preco_disponivel'] > 0)
+    )
+    df_berlinda_raw.loc[mask_calc, 'dias_necessarios'] = np.ceil(
+        df_berlinda_raw.loc[mask_calc, 'falta_meta'] / df_berlinda_raw.loc[mask_calc, 'media_preco_disponivel']
+    ).astype(int)
+
+    # --- STATUS OPERACIONAL (5 categorias, sem "folga") ---
+    def definir_status(row):
+        if row['faturamento_mes'] < row['meta']:
+            if row['dias_disponiveis'] == 0:
+                return "🔴 Abaixo inviável"
+            elif row['dias_necessarios'] <= row['dias_disponiveis'] and row['potencial_realista'] >= row['meta']:
+                return "🟢 Abaixo viável"
+            elif row['dias_necessarios'] <= row['dias_disponiveis']:
+                return "🟠 Abaixo precisa esforço"
+            else:
+                return "🔴 Abaixo inviável"
+        else:
+            if row['dias_disponiveis'] == 0:
+                return "🟡 Acima sem ação"
+            else:
+                return "🟡 Acima com risco"  # ÚNICO status para acima com dias
+
+    df_berlinda_raw['status_operacional'] = df_berlinda_raw.apply(definir_status, axis=1)
+
+    # --- SCORE DE PRIORIDADE (simétrico) ---
+    def calcular_score(row):
+        if row['dias_disponiveis'] == 0:
+            return 0.0
+        try:
+            if row['faturamento_mes'] < row['meta']:
+                if row['dias_necessarios'] <= 0 or row['dias_necessarios'] > row['dias_disponiveis']:
+                    return 0.0
+                return (row['falta_meta'] / row['meta']) * \
+                       (1 / row['dias_disponiveis']) * \
+                       (row['potencial_max'] - row['faturamento_mes']) * \
+                       (1 / row['dias_necessarios'])
+            else:
+                desvio = abs(row['atingimento_meta'] - 1.0)
+                proximidade = max(1 - desvio, 0.01)
+                return proximidade * row['dias_disponiveis'] * row['media_preco_disponivel']
+        except:
+            return 0.0
+
+    df_berlinda_raw['score_bruto'] = df_berlinda_raw.apply(calcular_score, axis=1)
+
+    # Rank percentil (evita outliers)
+    validos = df_berlinda_raw['score_bruto'] > 0
+    df_berlinda_raw['score_normalizado'] = 0.0
+    if validos.sum() > 1:
+        scores = df_berlinda_raw.loc[validos, 'score_bruto']
+        ranks = scores.rank(method='min', ascending=False) - 1
+        max_rank = len(ranks) - 1
+        df_berlinda_raw.loc[validos, 'score_normalizado'] = (ranks / max_rank) * 100
+    elif validos.sum() == 1:
+        df_berlinda_raw.loc[validos, 'score_normalizado'] = 100.0
+
+    df_berlinda_raw['score_normalizado'] = df_berlinda_raw['score_normalizado'].round(2)
+
+    # Faixa de prioridade
+    def classificar_prioridade(score):
+        if score >= 80:
+            return "Crítico"
+        elif score >= 50:
+            return "Alta"
+        elif score >= 20:
+            return "Média"
+        else:
+            return "Baixa"
+    df_berlinda_raw['faixa_prioridade'] = df_berlinda_raw['score_normalizado'].apply(classificar_prioridade)
+
+    # --- AGORA USAR df_berlinda_raw como base para todos os componentes ---
+    df_berlinda_filtered = df_berlinda_raw
 
     # --- KPIs da Berlinda ---
     total_berlinda = len(df_berlinda_filtered)
     viaveis = df_berlinda_filtered[df_berlinda_filtered['status_operacional'].isin(['🟢 Abaixo viável', '🟠 Abaixo precisa esforço'])]
     acima_risco = df_berlinda_filtered[df_berlinda_filtered['status_operacional'] == '🟡 Acima com risco']
-    prioritarios = df_berlinda_filtered[df_berlinda_filtered['prioridade'].isin(['Crítica', 'Média'])]
+    prioritarios = df_berlinda_filtered[df_berlinda_filtered['faixa_prioridade'].isin(['Crítico', 'Alta'])]
 
     col1, col2, col3, col4 = st.columns(4)
     col1.metric("Total na Berlinda", total_berlinda)
@@ -256,12 +367,10 @@ with tab2:
     col3.metric("Acima com risco", len(acima_risco))
     col4.metric("Prioritários", len(prioritarios))
 
-    # --- STATUS OPERACIONAL (barras horizontais) ---
+    # --- STATUS OPERACIONAL (barras verticais) ---
     st.subheader("Status Operacional")
     status_counts = df_berlinda_filtered['status_operacional'].value_counts().reset_index()
     status_counts.columns = ['status', 'count']
-    status_counts = status_counts.sort_values('count', ascending=False)
-
     fig_status = px.bar(
         status_counts,
         x='status',
@@ -288,12 +397,10 @@ with tab2:
     - **🟡 Acima com risco**: Está **na meta ou acima**, mas **ainda tem dias disponíveis** → pode cair se concorrentes seguirem faturando.
     - **🟡 Acima sem ação**: Já bateu a meta e **não tem mais dias disponíveis** → só monitorar.""")
 
-    # --- SCATTER PLOT DE VIABILIDADE ---
+    # --- SCATTER PLOT ---
     st.subheader("Scatter Plot: Viabilidade e Prioridade")
-
-    # Opções para eixo X
     x_options_berlinda = {
-        "Dias Disponíveis": "ocupacao_ainda_disponivel",
+        "Dias Disponíveis": "dias_disponiveis",
         "Falta Meta (R$)": "falta_meta",
         "Preço Médio Disponível": "media_preco_disponivel",
         "Taxa de Ocupação (TO)": "to_listings"
@@ -301,18 +408,16 @@ with tab2:
     x_label = st.selectbox("Eixo X", options=list(x_options_berlinda.keys()), index=0)
     x_col = x_options_berlinda[x_label]
 
-    df_scatter_berlinda = df_berlinda_filtered[df_berlinda_filtered['ocupacao_ainda_disponivel'] > 0].copy()
+    df_scatter_berlinda = df_berlinda_filtered[df_berlinda_filtered['dias_disponiveis'] > 0].copy()
     if not df_scatter_berlinda.empty:
-        # Usar valor absoluto para falta_meta no tamanho (evitar negativos)
         df_scatter_berlinda['falta_meta_abs'] = df_scatter_berlinda['falta_meta'].abs()
-
         fig_scatter = px.scatter(
             df_scatter_berlinda,
             x=x_col,
             y='score_normalizado',
             color='status_operacional',
             size='falta_meta_abs',
-            hover_data=['listing', 'carteira', 'estado', 'ocupacao_ainda_disponivel', 'falta_meta'],
+            hover_data=['listing', 'carteira', 'estado', 'dias_disponiveis', 'falta_meta'],
             color_discrete_map={
                 '🟢 Abaixo viável': '#388e3c',
                 '🟠 Abaixo precisa esforço': '#ffa726',
@@ -331,41 +436,37 @@ with tab2:
     st.markdown("""
     ##### 🎯 O que é a "Prioridade"?
     É um **score de 0 a 100** que indica **quão crítico é agir agora**:
-    - **Crítica (80–100)**: Alto impacto + baixo esforço (ex: falta 1 dia para bater meta).
-    - **Média (50–79)**: Viável, mas exige atenção.
-    - **Baixa (0–49)**: Pouco impacto ou inviável.
+    - **Crítico (80–100)**: Alto impacto + baixo esforço.
+    - **Alta (50–79)**: Viável, mas exige atenção.
+    - **Média/Baixa**: Pouco impacto ou inviável.
     - **Baseado em**: proximidade da meta, dias disponíveis e potencial de ajuste.
     """)
 
     # --- TABELA OPERACIONAL ---
     st.subheader("Tabela Operacional")
-
-    # Renomear para simplificar (opcional, mas recomendado)
-    df_display = df_berlinda_filtered.rename(columns={'faixa_prioridade': 'prioridade'})
-
     col_filt1, col_filt2 = st.columns(2)
     with col_filt1:
         filtro_status = st.multiselect(
             "Filtrar por Status",
-            options=df_display['status_operacional'].unique(),
-            default=df_display['status_operacional'].unique()
+            options=df_berlinda_filtered['status_operacional'].unique(),
+            default=df_berlinda_filtered['status_operacional'].unique()
         )
     with col_filt2:
         filtro_prioridade = st.multiselect(
             "Filtrar por Prioridade",
-            options=df_display['prioridade'].unique(),
-            default=df_display['prioridade'].unique()
+            options=df_berlinda_filtered['faixa_prioridade'].unique(),
+            default=df_berlinda_filtered['faixa_prioridade'].unique()
         )
 
-    df_tabela_filtrada = df_display[
-        (df_display['status_operacional'].isin(filtro_status)) &
-        (df_display['prioridade'].isin(filtro_prioridade))
+    df_tabela_filtrada = df_berlinda_filtered[
+        (df_berlinda_filtered['status_operacional'].isin(filtro_status)) &
+        (df_berlinda_filtered['faixa_prioridade'].isin(filtro_prioridade))
     ]
 
     col_order = [
-        'listing', 'carteira', 'estado', 'status_operacional', 'prioridade',
+        'listing', 'carteira', 'estado', 'status_operacional', 'faixa_prioridade',
         'faturamento_mes', 'meta', 'falta_meta',
-        'ocupacao_ainda_disponivel', 'dias_necessarios',
+        'dias_disponiveis', 'dias_necessarios',
         'to_listings', 'media_preco_disponivel',
         'score_normalizado'
     ]
@@ -374,8 +475,7 @@ with tab2:
     # Ordenação correta
     ordem_map = {"Crítico": 4, "Alta": 3, "Média": 2, "Baixa": 1}
     df_tabela_filtrada = df_tabela_filtrada.copy()
-    df_tabela_filtrada['ordem'] = df_tabela_filtrada['prioridade'].map(ordem_map)
-
+    df_tabela_filtrada['ordem'] = df_tabela_filtrada['faixa_prioridade'].map(ordem_map)
     df_tabela_final = df_tabela_filtrada[col_order].sort_values(
         ['ordem', 'score_normalizado', 'dias_necessarios'],
         ascending=[False, False, True]
@@ -383,11 +483,9 @@ with tab2:
 
     st.dataframe(df_tabela_final, use_container_width=True, height=500)
 
-    # Botão de exportação (só dos filtrados)
     @st.cache_data
     def convert_df_berlinda(df):
         return df.to_csv(index=False).encode('utf-8')
-    
     csv_berlinda = convert_df_berlinda(df_tabela_final)
     st.download_button("📥 Exportar Tabela Filtrada", csv_berlinda, "berlinda_filtrada.csv", "text/csv")
 
