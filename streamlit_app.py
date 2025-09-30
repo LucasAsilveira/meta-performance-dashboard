@@ -37,10 +37,16 @@ st.title("📊 Meta Performance Dashboard")
 df = load_data()
 df_berlinda = load_berlinda()
 
-try:
-    timestamp = os.path.getmtime("meta_analysis_final_enriched.csv")
-    data_atualizacao = pd.to_datetime(df['data_atualizacao'].iloc[0])
-except (OSError, FileNotFoundError):
+# Extrair a data de atualização dos próprios dados (mais confiável)
+if 'data_atualizacao' in df.columns and not df['data_atualizacao'].isna().all():
+    data_atualizacao = df['data_atualizacao'].iloc[0]  # todos os registros têm a mesma data
+    # Garantir formato legível (caso esteja como '2025-09-25')
+    try:
+        data_atualizacao = pd.to_datetime(data_atualizacao).strftime('%d/%m/%Y')
+        # Se quiser incluir hora, mas seu CSV só tem data, então deixe sem hora
+    except:
+        pass  # mantém como string se falhar
+else:
     data_atualizacao = "desconhecida"
 
 
