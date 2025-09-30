@@ -38,14 +38,15 @@ df = load_data()
 df_berlinda = load_berlinda()
 
 # Extrair a data de atualização dos próprios dados (mais confiável)
+# Extrair data de atualização dos próprios dados
 if 'data_atualizacao' in df.columns and not df['data_atualizacao'].isna().all():
-    data_atualizacao = df['data_atualizacao'].iloc[0]  # todos os registros têm a mesma data
-    # Garantir formato legível (caso esteja como '2025-09-25')
+    # Pega a primeira data válida (todos os registros têm a mesma)
+    data_str = df['data_atualizacao'].dropna().iloc[0]
     try:
-        data_atualizacao = pd.to_datetime(data_atualizacao).strftime('%d/%m/%Y')
-        # Se quiser incluir hora, mas seu CSV só tem data, então deixe sem hora
+        # Se estiver no formato 'YYYY-MM-DD', converte para 'DD/MM/YYYY'
+        data_atualizacao = pd.to_datetime(data_str).strftime('%d/%m/%Y')
     except:
-        pass  # mantém como string se falhar
+        data_atualizacao = str(data_str)
 else:
     data_atualizacao = "desconhecida"
 
