@@ -37,6 +37,13 @@ st.title("📊 Meta Performance Dashboard")
 df = load_data()
 df_berlinda = load_berlinda()
 
+if 'data_geracao' in df.columns:
+    data_atualizacao = pd.to_datetime(df['data_geracao'].iloc[0])
+    data_exibicao = data_atualizacao.strftime('%d/%m/%Y %H:%M')
+else:
+    # fallback: usar data de modificação do arquivo
+    timestamp = os.path.getmtime("meta_analysis_final_enriched.csv")
+    data_exibicao = datetime.datetime.fromtimestamp(timestamp).strftime('%d/%m/%Y %H:%M')
 
 # Verificar se os dados foram carregados
 if df.empty:
@@ -112,7 +119,7 @@ with tab1:
     # Calcular métricas
     total_imoveis = len(df_filtered)
     berlinda_df = df_filtered[df_filtered['grupo_criticidade'] == 'berlinda']
-    berlinda_com_potencial = berlinda_df[berlinda_df['ocupacao_ainda_disponivel'] > 5]
+    berlinda_com_potencial = berlinda_df[berlinda_df['ocupacao_ainda_disponivel'] >= 3]
 
     col_kpi1, col_kpi2, col_kpi3, col_kpi4 = st.columns(4)
     col_kpi1.metric("Listings Analisados", f"{total_imoveis:,}")
@@ -492,9 +499,7 @@ with tab2:
 
 #a
 # --- Rodapé ---
-# Obter a data de modificação do arquivo de dados
-data_arquivo = os.path.getmtime("meta_analysis_final_enriched.csv")
-data_atualizacao = datetime.fromtimestamp(data_arquivo).strftime('%d/%m/%Y %H:%M')
+
 
 st.caption(f"Total de listings exibidos: {len(df_filtered)} | Dados atualizados em: {data_atualizacao}")
 st.caption(f"Total de listings exibidos: {len(df_filtered)} | Atualizado em {pd.Timestamp.now().strftime('%d/%m/%Y %H:%M')}")
