@@ -37,13 +37,12 @@ st.title("📊 Meta Performance Dashboard")
 df = load_data()
 df_berlinda = load_berlinda()
 
-if 'data_geracao' in df.columns:
-    data_atualizacao = pd.to_datetime(df['data_geracao'].iloc[0])
-    data_exibicao = data_atualizacao.strftime('%d/%m/%Y %H:%M')
-else:
-    # fallback: usar data de modificação do arquivo
+try:
     timestamp = os.path.getmtime("meta_analysis_final_enriched.csv")
-    data_exibicao = datetime.datetime.fromtimestamp(timestamp).strftime('%d/%m/%Y %H:%M')
+    data_exibicao = datetime.fromtimestamp(timestamp).strftime('%d/%m/%Y %H:%M')
+except (OSError, FileNotFoundError):
+    data_exibicao = "desconhecida"
+
 
 # Verificar se os dados foram carregados
 if df.empty:
