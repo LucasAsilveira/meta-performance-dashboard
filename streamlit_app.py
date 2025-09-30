@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 import os
+from datetime import datetime
 import sys
 
 @st.cache_data
@@ -491,4 +492,9 @@ with tab2:
 
 #a
 # --- Rodapé ---
+# Obter a data de modificação do arquivo de dados
+data_arquivo = os.path.getmtime("meta_analysis_final_enriched.csv")
+data_atualizacao = datetime.fromtimestamp(data_arquivo).strftime('%d/%m/%Y %H:%M')
+
+st.caption(f"Total de listings exibidos: {len(df_filtered)} | Dados atualizados em: {data_atualizacao}")
 st.caption(f"Total de listings exibidos: {len(df_filtered)} | Atualizado em {pd.Timestamp.now().strftime('%d/%m/%Y %H:%M')}")
