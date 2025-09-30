@@ -8,6 +8,7 @@ data/raw/*.csv
 __pycache__/
 *.pyc
 *.pyo
+teste.ipynb
 
 # Virtual environment
 venv/
