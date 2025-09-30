@@ -39,7 +39,7 @@ df_berlinda = load_berlinda()
 
 try:
     timestamp = os.path.getmtime("meta_analysis_final_enriched.csv")
-    data_atualizacao = pd.to_datetime(df['data_geracao'].iloc[0])
+    data_atualizacao = pd.to_datetime(df['data_atualizacao'].iloc[0])
 except (OSError, FileNotFoundError):
     data_atualizacao = "desconhecida"
 
