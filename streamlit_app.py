@@ -39,9 +39,9 @@ df_berlinda = load_berlinda()
 
 try:
     timestamp = os.path.getmtime("meta_analysis_final_enriched.csv")
-    data_exibicao = datetime.fromtimestamp(timestamp).strftime('%d/%m/%Y %H:%M')
+    data_atualizacao = datetime.fromtimestamp(timestamp).strftime('%d/%m/%Y %H:%M')
 except (OSError, FileNotFoundError):
-    data_exibicao = "desconhecida"
+    data_atualizacao = "desconhecida"
 
 
 # Verificar se os dados foram carregados
