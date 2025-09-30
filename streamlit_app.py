@@ -39,7 +39,7 @@ df_berlinda = load_berlinda()
 
 try:
     timestamp = os.path.getmtime("meta_analysis_final_enriched.csv")
-    data_atualizacao = datetime.fromtimestamp(timestamp).strftime('%d/%m/%Y %H:%M')
+    data_atualizacao = pd.to_datetime(df['data_geracao'].iloc[0])
 except (OSError, FileNotFoundError):
     data_atualizacao = "desconhecida"
 
@@ -501,4 +501,4 @@ with tab2:
 
 
 st.caption(f"Total de listings exibidos: {len(df_filtered)} | Dados atualizados em: {data_atualizacao}")
-st.caption(f"Total de listings exibidos: {len(df_filtered)} | Atualizado em {pd.Timestamp.now().strftime('%d/%m/%Y %H:%M')}")
+#st.caption(f"Total de listings exibidos: {len(df_filtered)} | Atualizado em {pd.Timestamp.now().strftime('%d/%m/%Y %H:%M')}")
