@@ -37,20 +37,6 @@ st.title("📊 Meta Performance Dashboard")
 df = load_data()
 df_berlinda = load_berlinda()
 
-# Extrair a data de atualização dos próprios dados (mais confiável)
-# Extrair data de atualização dos próprios dados
-if 'data_atualizacao' in df.columns and not df['data_atualizacao'].isna().all():
-    # Pega a primeira data válida (todos os registros têm a mesma)
-    data_str = df['data_atualizacao'].dropna().iloc[0]
-    try:
-        # Se estiver no formato 'YYYY-MM-DD', converte para 'DD/MM/YYYY'
-        data_atualizacao = pd.to_datetime(data_str).strftime('%d/%m/%Y')
-    except:
-        data_atualizacao = str(data_str)
-else:
-    data_atualizacao = "desconhecida"
-
-
 # Verificar se os dados foram carregados
 if df.empty:
     st.error("Não foi possível carregar os dados principais.")
