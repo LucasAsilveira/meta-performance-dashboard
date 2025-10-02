@@ -248,6 +248,10 @@ with tab2:
     # --- ENRIQUECIMENTO DO DATAFRAME DA BERLINDA (em tempo real) ---
     import numpy as np
 
+    # Definir a data de referência (deve ser a mesma usada na geração dos dados)
+    DATA_REFERENCIA = pd.to_datetime('2024-09-30')  # Use a mesma data do script de extração
+    ULTIMO_DIA_MES = DATA_REFERENCIA + pd.offsets.MonthEnd(0)
+
     # Garantir colunas numéricas
     df_berlinda_raw['media_preco_disponivel'] = pd.to_numeric(df_berlinda_raw['media_preco_disponivel'], errors='coerce')
     df_berlinda_raw['faturamento_mes'] = pd.to_numeric(df_berlinda_raw['faturamento_mes'], errors='coerce')
@@ -255,8 +259,17 @@ with tab2:
     df_berlinda_raw['to_listings'] = pd.to_numeric(df_berlinda_raw['to_listings'], errors='coerce')
     df_berlinda_raw['ocupacao_ainda_disponivel'] = pd.to_numeric(df_berlinda_raw['ocupacao_ainda_disponivel'], errors='coerce')
 
+    # RECALCULAR DIAS DISPONÍVEIS COM BASE NA DATA DE REFERÊNCIA
+    if DATA_REFERENCIA == ULTIMO_DIA_MES:
+        # Se for último dia do mês, dias disponíveis devem ser 0
+        df_berlinda_raw['dias_disponiveis'] = 0
+    else:
+        # Calcular dias restantes no mês a partir da data de referência
+        dias_restantes = (ULTIMO_DIA_MES - DATA_REFERENCIA).days
+        # Limitar aos dias disponíveis no CSV (não pode ser maior que os dias restantes)
+        df_berlinda_raw['dias_disponiveis'] = df_berlinda_raw['ocupacao_ainda_disponivel'].clip(upper=dias_restantes).fillna(0).astype(int)
+
     # Criar colunas base
-    df_berlinda_raw['dias_disponiveis'] = df_berlinda_raw['ocupacao_ainda_disponivel'].fillna(0).astype(int)
     df_berlinda_raw['falta_meta'] = df_berlinda_raw['meta'] - df_berlinda_raw['faturamento_mes']
 
     # Inicializar colunas
