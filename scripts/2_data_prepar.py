@@ -196,28 +196,27 @@ if len(df_berlinda) > 0:
     
     # Classificar status operacional
     def classificar_status(row):
+        # >>> REGRA 1: Acima ou igual à meta
         if row["atingimento_meta"] >= 1.0:
-            if row["dias_disponiveis"] > 0: # <<< Usar a nova coluna
-                if row["potencial_realista"] > row["meta"] * 1.1:
-                    return "🟢 Acima com folga"
-                else:
-                    return "🟡 Acima com risco"
+            if row["dias_disponiveis"] > 0:
+                # Se está na meta ou acima, mas ainda tem dias, está em risco de cair.
+                return "🟡 Acima com risco"
             else:
+                # Se está na meta ou acima e não tem mais dias, a ação é apenas monitorar.
                 return "🟡 Acima sem ação"
+        # >>> REGRA 2: Abaixo da meta
         else:
-            if row["dias_disponiveis"] == 0: # <<< Usar a nova coluna
+            if row["dias_disponiveis"] == 0:
+                # Se está abaixo da meta e não tem mais dias, é inviável bater a meta no mês.
                 return "🔴 Abaixo inviável"
-            elif row["dias_necessarios"] <= row["dias_disponiveis"] and row["potencial_realista"] >= row["meta"]: # <<< Usar a nova coluna
+            elif row["potencial_realista"] >= row["meta"]:
+                # Se está abaixo, tem dias e o potencial realista permite bater a meta, é viável.
                 return "🟢 Abaixo viável"
             else:
+                # Se está abaixo, tem dias, mas mesmo com o potencial realista não bate a meta, precisa de esforço.
                 return "🟠 Abaixo precisa esforço"
     
     df_berlinda["status_operacional"] = df_berlinda.apply(classificar_status, axis=1)
-    
-    print(f"✅ Métricas da Berlinda calculadas para {len(df_berlinda)} imóveis")
-else:
-    print("⚠️ Nenhum imóvel encontrado na Berlinda")
-    df_berlinda = pd.DataFrame()  # DataFrame vazio
 
 # %%
 # Salvar resultados
