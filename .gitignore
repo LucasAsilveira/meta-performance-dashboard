@@ -1,23 +1,93 @@
-# Dados brutos (gerados automaticamente)
-data/raw/*.csv
+# ==============================================================================
+# PASTAS DE DADOS - ESTRATÉGIA SELETIVA
+# ==============================================================================
+# Ignora apenas os dados brutos (gerados automaticamente, grandes)
+data/raw/
 
-# Dados processados (gerados automaticamente)
-data/raw/*.csv
+# NOTA: NÃO vamos ignorar a pasta data/processed/
+# Os arquivos dela serão commitados para que o app no Streamlit funcione.
 
-# Python
+# ==============================================================================
+# PYTHON
+# ==============================================================================
+# Byte-compiled / optimized / DLL files
 __pycache__/
-*.pyc
-*.pyo
-teste.ipynb
+*.py[cod]
+*$py.class
 
-# Virtual environment
+# C extensions
+*.so
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# PyInstaller
+*.manifest
+*.spec
+
+# Unit test / coverage reports
+htmlcov/
+.tox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+.hypothesis/
+.pytest_cache/
+
+# Jupyter Notebook
+*.ipynb
+
+# ==============================================================================
+# AMBIENTE VIRTUAL E CONFIGURAÇÕES
+# ==============================================================================
+# Ambiente virtual
 venv/
 env/
+ENV/
 
-# IDE
+# Variáveis de ambiente (secrets, chaves de API)
+.env
+.env.local
+.env.*.local
+
+# ==============================================================================
+# FERRAMENTAS DE DESENVOLVIMENTO
+# ==============================================================================
+# IDEs
 .vscode/
 .idea/
+*.swp
+*.swo
+*~
 
-# OS
+# ==============================================================================
+# SISTEMA OPERACIONAL
+# ==============================================================================
+# macOS
 .DS_Store
+.AppleDouble
+.LSOverride
+
+# Windows
 Thumbs.db
+ehthumbs.db
+Desktop.ini

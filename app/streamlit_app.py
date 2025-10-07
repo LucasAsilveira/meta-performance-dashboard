@@ -5,47 +5,102 @@ import os
 from datetime import datetime
 import sys
 
+
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+PROJECT_ROOT = os.path.dirname(SCRIPT_DIR)
+DATA_PROCESSED_PATH = os.path.join(PROJECT_ROOT, 'data', 'processed')
+
+# ==============================================================================
 @st.cache_data
-def load_data():
-    """Carrega o dataset principal"""
+def load_data(filename):
+    """Carrega o dataset de um arquivo CSV específico da pasta processed."""
+    file_path = os.path.join(DATA_PROCESSED_PATH, filename)
     try:
-        # Os arquivos estão no mesmo diretório que o script!
-        df = pd.read_csv("meta_analysis_final_enriched.csv")
-        if df['atingimento_meta'].max() > 5:
+        df = pd.read_csv(file_path)
+        
+        # Correção do atingimento da meta, se necessário
+        if 'atingimento_meta' in df.columns and df['atingimento_meta'].max() > 5:
             df['atingimento_meta'] = df['atingimento_meta'] / 100
+            
         return df
     except FileNotFoundError:
-        st.error("Arquivo meta_analysis_final_enriched.csv não encontrado!")
-        st.write(f"Diretório atual: {os.getcwd()}")
-        st.write(f"Conteúdo da pasta: {os.listdir('.')}")
+        st.error(f"Arquivo não encontrado: {file_path}")
         return pd.DataFrame()
+    except Exception as e:
+        st.error(f"Ocorreu um erro ao carregar o arquivo {filename}: {e}")
+        return pd.DataFrame()
+
 
 @st.cache_data
-def load_berlinda():
-    """Carrega o dataset da Berlinda"""
+def load_berlinda(filename):
+    """Carrega o dataset da Berlinda de um arquivo CSV específico."""
+    file_path = os.path.join(DATA_PROCESSED_PATH, filename)
     try:
-        return pd.read_csv("berlinda_prepared.csv")
+        return pd.read_csv(file_path)
     except FileNotFoundError:
-        st.error("Arquivo berlinda_prepared.csv não encontrado!")
-        st.write(f"Conteúdo da pasta: {os.listdir('.')}")
+        # Se o arquivo da berlinda não for encontrado, não é um erro fatal,
+        # pode ser que não houvesse dados de berlinda naquele dia.
+        # st.warning(f"Arquivo da Berlinda não encontrado: {file_path}")
+        return pd.DataFrame()
+    except Exception as e:
+        st.error(f"Ocorreu um erro ao carregar o arquivo da Berlinda {filename}: {e}")
         return pd.DataFrame()
 
+# LÓGICA DE SELEÇÃO DE DADOS (NOVA SEÇÃO NO INÍCIO DO APP)
+
+st.sidebar.header("Seleção de Dados")
+
+# Encontrar todos os arquivos de snapshot na pasta
+try:
+    all_files = os.listdir(DATA_PROCESSED_PATH)
+    snapshot_files = sorted(
+        [f for f in all_files if f.startswith('meta_analysis_final_enriched_') and f.endswith('.csv')],
+        reverse=True
+    )
+    
+    if not snapshot_files:
+        st.sidebar.error("Nenhum arquivo de dados encontrado em `data/processed/`.")
+        st.info("Por favor, execute os scripts de importação e preparação de dados primeiro.")
+        st.stop() # Para a execução do app aqui
+        
+    # Criar o selectbox para o usuário escolher o snapshot
+    selected_snapshot = st.sidebar.selectbox(
+        "Selecione a data do snapshot para análise:",
+        options=snapshot_files,
+        index=0 # Mostra o mais recente por padrão
+    )
+    
+    # Construir o nome do arquivo da Berlinda correspondente
+    berlinda_snapshot = selected_snapshot.replace('meta_analysis_final_enriched_', 'berlinda_prepared_')
+    
+    # Mostrar qual arquivo está sendo carregado
+    st.sidebar.success(f"Carregando dados de: {selected_snapshot}")
+
+except FileNotFoundError:
+    st.error(f"A pasta de dados não foi encontrada em: {DATA_PROCESSED_PATH}")
+    st.write("Verifique se a estrutura de pastas está correta.")
+    st.stop()
+
+
 # Título
-st.title("📊 Meta Performance Dashboard")
+st.title("📊 Meta Performance Dashboard  [V-1.01]")
 
 # --- Carregar dados ---
-df = load_data()
-df_berlinda = load_berlinda()
+df = load_data(selected_snapshot)
+df_berlinda = load_berlinda(berlinda_snapshot)
+
+# Verificar se os dados foram carregados
+if not df.empty and 'data_da_execucao' in df.columns:
+    # Converte para datetime e depois para string no formato desejado
+    data_execucao = pd.to_datetime(df['data_da_execucao'].iloc[0])
+    data_str_para_footer = data_execucao.strftime('%d/%m/%Y')
+else:
+    data_execucao = pd.to_datetime('today') # Fallback
+    data_str_para_footer = "N/A"
 
 # Verificar se os dados foram carregados
 if df.empty:
     st.error("Não foi possível carregar os dados principais.")
-    st.stop()
-
-
-# Verificar se os dados foram carregados
-if df.empty:
-    st.error("Não foi possível carregar os dados principais. Verifique se os scripts de preparação foram executados.")
     st.stop()
 
 # --- FILTROS (compartilhados) ---
@@ -502,9 +557,7 @@ with tab2:
     csv_berlinda = convert_df_berlinda(df_tabela_final)
     st.download_button("📥 Exportar Tabela Filtrada", csv_berlinda, "berlinda_filtrada.csv", "text/csv")
 
-#a
 # --- Rodapé ---
+# <<< ALTERAÇÃO: Usar a data dinâmica no rodapé
 
-data_atualizacao = '2025-09-25'
-st.caption(f"Total de listings exibidos: {len(df_filtered)} | Dados atualizados em: {data_atualizacao}")
-#st.caption(f"Total de listings exibidos: {len(df_filtered)} | Atualizado em {pd.Timestamp.now().strftime('%d/%m/%Y %H:%M')}")
+st.caption(f"Total de listings exibidos: {len(df_filtered)} | Dados atualizados em: {data_str_para_footer}")
