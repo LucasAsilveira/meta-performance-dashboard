@@ -38,9 +38,6 @@ def load_berlinda(filename):
     try:
         return pd.read_csv(file_path)
     except FileNotFoundError:
-        # Se o arquivo da berlinda não for encontrado, não é um erro fatal,
-        # pode ser que não houvesse dados de berlinda naquele dia.
-        # st.warning(f"Arquivo da Berlinda não encontrado: {file_path}")
         return pd.DataFrame()
     except Exception as e:
         st.error(f"Ocorreu um erro ao carregar o arquivo da Berlinda {filename}: {e}")
@@ -48,8 +45,9 @@ def load_berlinda(filename):
 
 # LÓGICA DE SELEÇÃO DE DADOS (NOVA SEÇÃO NO INÍCIO DO APP)
 
-st.sidebar.header("Seleção de Dados")
+st.sidebar.markdown("### 📅 Seleção de Dados")
 
+# Encontrar todos os arquivos de snapshot na pasta
 # Encontrar todos os arquivos de snapshot na pasta
 try:
     all_files = os.listdir(DATA_PROCESSED_PATH)
@@ -63,18 +61,31 @@ try:
         st.info("Por favor, execute os scripts de importação e preparação de dados primeiro.")
         st.stop() # Para a execução do app aqui
         
+    # <<< ALTERAÇÃO: Extrair apenas a data para exibição no selectbox
+    # Ex: 'meta_analysis_final_enriched_2025-10-06.csv' -> '2025-10-06'
+    date_options = [f.split('_')[-1].replace('.csv', '') for f in snapshot_files]
+    
+    # Criar um dicionário para mapear a data de volta para o nome do arquivo
+    date_to_filename = {date: filename for date, filename in zip(date_options, snapshot_files)}
+    
     # Criar o selectbox para o usuário escolher o snapshot
-    selected_snapshot = st.sidebar.selectbox(
-        "Selecione a data do snapshot para análise:",
-        options=snapshot_files,
+    selected_display_name = st.sidebar.selectbox(
+        "Escolha a data da análise:",
+        options=date_options,
         index=0 # Mostra o mais recente por padrão
     )
+    
+    # Obter o nome completo do arquivo a partir da data selecionada
+    selected_snapshot = date_to_filename[selected_display_name]
     
     # Construir o nome do arquivo da Berlinda correspondente
     berlinda_snapshot = selected_snapshot.replace('meta_analysis_final_enriched_', 'berlinda_prepared_')
     
-    # Mostrar qual arquivo está sendo carregado
-    st.sidebar.success(f"Carregando dados de: {selected_snapshot}")
+    # <<< ALTERAÇÃO: Reduzir o tamanho da mensagem de sucesso
+    st.sidebar.markdown(
+        f'<p style="font-size:12px; color:green;">✅ Carregando dados de: <b>{selected_display_name}</b></p>', 
+        unsafe_allow_html=True
+    )
 
 except FileNotFoundError:
     st.error(f"A pasta de dados não foi encontrada em: {DATA_PROCESSED_PATH}")
@@ -214,15 +225,29 @@ with tab1:
         title="Quantidade por Grupo"
     )
     fig1.update_traces(textposition="outside")
+    fig1.update_layout(height=600)
     st.plotly_chart(fig1, use_container_width=True)
 
     # --- HEATMAP ---
     st.subheader("Heatmap: % de Imóveis por Categoria e Grupo de Criticidade")
     agrupamento = st.radio("Agrupar por:", options=["Estado", "Carteira"], horizontal=True)
-    coluna_agrupamento = 'estado' if agrupamento == "Estado" else 'carteira'
+    # Define a coluna de agrupamento padrão com base no radio button
+    if agrupamento == "Estado":
+        coluna_agrupamento = 'estado'
+        nome_para_exibicao = "Estado"
+    else: # "Carteira"
+        coluna_agrupamento = 'carteira'
+        nome_para_exibicao = "Carteira"
+
+    # VERIFICAÇÃO: Se apenas UM estado foi selecionado no filtro, muda para cidade
+    if len(estado_sel) == 1:
+        coluna_agrupamento = 'cidade'
+        # Atualiza o nome para exibição para ficar claro no gráfico
+        nome_para_exibicao = f"Cidade (em {estado_sel[0]})"
+        st.info(f"📍 Filtro de Estado detectado. Exibindo o heatmap por **{nome_para_exibicao}**.")
 
     heatmap_abs = df_filtered.pivot_table(
-        index=coluna_agrupamento,
+        index=coluna_agrupamento, # Usa a coluna definida pela nova lógica
         columns='grupo_criticidade',
         values='listing',
         aggfunc='count',
@@ -238,24 +263,67 @@ with tab1:
         text_auto=".1f",
         color_continuous_scale='Reds',
         aspect="auto",
-        labels={'x': 'Grupo de Criticidade', 'y': agrupamento, 'color': f'% por {agrupamento}'},
-        title=f"Proporção de imóveis por {agrupamento} e Grupo de Criticidade (%)"
+        # Usa a variável 'nome_para_exibicao' nos rótulos e título
+        labels={'x': 'Grupo de Criticidade', 'y': nome_para_exibicao, 'color': f'% por {nome_para_exibicao}'},
+        title=f"Proporção de imóveis por {nome_para_exibicao} e Grupo de Criticidade (%)"
     )
     st.plotly_chart(fig_heatmap, use_container_width=True)
 
-    # --- SCATTER PLOT ---
+        # --- SCATTER PLOT ---
     st.subheader("Scatter Plot: Análise de Performance")
-    x_options = ['ocupacao_ainda_disponivel', 'to_listings']
-    x_col = st.selectbox("Eixo X", options=x_options, index=0)
+    st.caption("Explore a relação entre as métricas de performance.")
 
-    df_scatter = df_filtered.dropna(subset=[x_col, 'atingimento_meta'])
-    hover_cols = ['listing', 'categoria', 'carteira', 'estado', 'cidade', 'to_listings', 'ocupacao_ainda_disponivel']
+    # <<< ALTERAÇÃO: Opções de eixo e escala
+    # Opções para o eixo secundário (que não é o atingimento)
+    secondary_axis_options = {
+        "Dias Disponíveis": 'ocupacao_ainda_disponivel',
+        "Taxa de Ocupação (TO)": 'to_listings'
+    }
+
+    # Radio button para escolher a variável para o eixo X
+    x_axis_label = st.radio("Eixo X:", options=list(secondary_axis_options.keys()), horizontal=True)
+    x_col = secondary_axis_options[x_axis_label]
+
+    # A variável principal é sempre 'atingimento_meta'
+    y_col = 'atingimento_meta'
+    y_axis_label = "Atingimento da Meta (%)"
+
+    # Checkbox para inverter os eixos
+    invert_axes = st.checkbox("Inverter Eixos (X/Y)", value=False)
+
+    if invert_axes:
+        # Troca as variáveis e labels
+        x_col, y_col = y_col, x_col
+        x_axis_label, y_axis_label = y_axis_label, x_axis_label
+
+    # Radio button para escolher a escala do eixo Y
+    scale_type = st.radio("Escala do Eixo Y:", options=["Normal", "Logarítmica"], horizontal=True)
+
+    # Preparar dados
+    df_scatter = df_filtered.dropna(subset=[x_col, y_col])
+
+    # Filtrar valores positivos para a escala logarítmica funcionar, se selecionada
+    if scale_type == "Logarítmica":
+        # O filtro se aplica à variável que estiver no eixo Y
+        if y_col == 'atingimento_meta':
+            df_scatter = df_scatter[df_scatter[y_col] > 0]
+        
+        if df_scatter.empty:
+            st.warning(f"Não há dados com {y_axis_label} > 0 para exibir na escala logarítmica.")
+            st.stop()
+
+    hover_cols = ['listing', 'categoria', 'carteira', 'estado', 'cidade']
+    if x_col not in hover_cols:
+        hover_cols.append(x_col)
+    if y_col not in hover_cols:
+        hover_cols.append(y_col)
     valid_hover_cols = [col for col in hover_cols if col in df_scatter.columns]
 
+    # Criar o gráfico
     fig2 = px.scatter(
         df_scatter,
         x=x_col,
-        y='atingimento_meta',
+        y=y_col,
         color='grupo_criticidade',
         color_discrete_map={
             "crítico": "#d32f2f",
@@ -266,17 +334,38 @@ with tab1:
         },
         hover_data=valid_hover_cols,
         labels={
-            x_col: x_col.replace('_', ' ').title(),
-            'atingimento_meta': 'Atingimento da Meta (%)',
+            x_col: x_axis_label,
+            y_col: y_axis_label,
             'grupo_criticidade': 'Grupo de Criticidade'
         },
-        title=f"{x_col.replace('_', ' ').title()} vs Atingimento da Meta"
+        title=f"{y_axis_label} vs {x_axis_label}"
     )
-    fig2.add_hline(y=0.5, line_dash="dot", line_color="#d32f2f", annotation_text="50% (Crítico)")
-    fig2.add_hline(y=0.8, line_dash="dot", line_color="#f57c00", annotation_text="80% (Berlinda)")
-    fig2.add_hline(y=1.1, line_dash="dot", line_color="#1976d2", annotation_text="110% (OK)")
-    fig2.update_layout(yaxis_tickformat='.0%')
-    st.plotly_chart(fig2, use_container_width=True)
+    
+    # <<< ALTERAÇÃO: Aplicar escala logarítmica condicionalmente
+    if scale_type == "Logarítmica":
+        fig2.update_layout(yaxis_type="log")
+    
+    # <<< ALTERAÇÃO: Adicionar linhas de referência condicionalmente
+    # Se 'atingimento_meta' está no eixo Y, usamos hlines (linhas horizontais)
+    if y_col == 'atingimento_meta':
+        fig2.add_hline(y=0.5, line_dash="dot", line_color="#d32f2f", annotation_text="50% (Crítico)")
+        fig2.add_hline(y=0.8, line_dash="dot", line_color="#f57c00", annotation_text="80% (Berlinda)")
+        fig2.add_hline(y=1.0, line_dash="solid", line_color="green", annotation_text="100% (Meta)")
+        fig2.add_hline(y=1.1, line_dash="dot", line_color="#1976d2", annotation_text="110% (OK)")
+    # Se 'atingimento_meta' está no eixo X, usamos vlines (linhas verticais)
+    elif x_col == 'atingimento_meta':
+        fig2.add_vline(x=0.5, line_dash="dot", line_color="#d32f2f", annotation_text="50% (Crítico)")
+        fig2.add_vline(x=0.8, line_dash="dot", line_color="#f57c00", annotation_text="80% (Berlinda)")
+        fig2.add_vline(x=1.0, line_dash="solid", line_color="green", annotation_text="100% (Meta)")
+        fig2.add_vline(x=1.1, line_dash="dot", line_color="#1976d2", annotation_text="110% (OK)")
+
+    # Formatar o eixo de atingimento como porcentagem
+    if y_col == 'atingimento_meta':
+        fig2.update_layout(yaxis_tickformat='.0%')
+    elif x_col == 'atingimento_meta':
+        fig2.update_layout(xaxis_tickformat='.0%')
+        
+    st.plotly_chart(fig2, use_container_width=True)    
 
     # --- TABELA COMPLETA ---
     st.subheader("Tabela Completa (com filtros aplicados)")
@@ -293,135 +382,45 @@ with tab2:
     st.subheader("🎯 Dashboard da Berlinda")
     st.caption("Análise tática dos imóveis entre 80–110% da meta, com foco em ação operacional.")
 
-    # Filtrar só a Berlinda do df_filtered (já com filtros aplicados)
-    df_berlinda_raw = df_filtered[df_filtered['grupo_criticidade'] == 'berlinda'].copy()
-
-    if df_berlinda_raw.empty:
-        st.warning("Nenhum imóvel na Berlinda com os filtros aplicados.")
+    # Verifica se o arquivo da Berlinda foi carregado com sucesso
+    if df_berlinda.empty:
+        st.warning("O arquivo da Berlinda para esta data não foi encontrado ou está vazio.")
+        st.info("Isso pode acontecer se não houver nenhum imóvel no grupo 'berlinda' na data selecionada.")
         st.stop()
 
-    # --- ENRIQUECIMENTO DO DATAFRAME DA BERLINDA (em tempo real) ---
-    import numpy as np
+    # Aplicar os filtros da barra lateral no DataFrame da Berlinda carregado
+    df_berlinda_filtered = df_berlinda.copy()
+    if categoria_sel:
+        df_berlinda_filtered = df_berlinda_filtered[df_berlinda_filtered["categoria"].isin(categoria_sel)]
+    if carteira_sel:
+        df_berlinda_filtered = df_berlinda_filtered[df_berlinda_filtered["carteira"].isin(carteira_sel)]
+    if estado_sel:
+        df_berlinda_filtered = df_berlinda_filtered[df_berlinda_filtered["estado"].isin(estado_sel)]
+    if cidade_sel:
+        df_berlinda_filtered = df_berlinda_filtered[df_berlinda_filtered["cidade"].isin(cidade_sel)]
+    if dias_min > 0:
+        df_berlinda_filtered = df_berlinda_filtered[df_berlinda_filtered["ocupacao_ainda_disponivel"] >= dias_min]
 
-    # Definir a data de referência (deve ser a mesma usada na geração dos dados)
-    DATA_REFERENCIA = pd.to_datetime('2024-09-30')  # Use a mesma data do script de extração
-    ULTIMO_DIA_MES = DATA_REFERENCIA + pd.offsets.MonthEnd(0)
+    if df_berlinda_filtered.empty:
+        st.warning("Nenhum imóvel na Berlinda encontrado com os filtros aplicados.")
+        st.stop()
 
-    # Garantir colunas numéricas
-    df_berlinda_raw['media_preco_disponivel'] = pd.to_numeric(df_berlinda_raw['media_preco_disponivel'], errors='coerce')
-    df_berlinda_raw['faturamento_mes'] = pd.to_numeric(df_berlinda_raw['faturamento_mes'], errors='coerce')
-    df_berlinda_raw['meta'] = pd.to_numeric(df_berlinda_raw['meta'], errors='coerce')
-    df_berlinda_raw['to_listings'] = pd.to_numeric(df_berlinda_raw['to_listings'], errors='coerce')
-    df_berlinda_raw['ocupacao_ainda_disponivel'] = pd.to_numeric(df_berlinda_raw['ocupacao_ainda_disponivel'], errors='coerce')
 
-    # RECALCULAR DIAS DISPONÍVEIS COM BASE NA DATA DE REFERÊNCIA
-    if DATA_REFERENCIA == ULTIMO_DIA_MES:
-        # Se for último dia do mês, dias disponíveis devem ser 0
-        df_berlinda_raw['dias_disponiveis'] = 0
-    else:
-        # Calcular dias restantes no mês a partir da data de referência
-        dias_restantes = (ULTIMO_DIA_MES - DATA_REFERENCIA).days
-        # Limitar aos dias disponíveis no CSV (não pode ser maior que os dias restantes)
-        df_berlinda_raw['dias_disponiveis'] = df_berlinda_raw['ocupacao_ainda_disponivel'].clip(upper=dias_restantes).fillna(0).astype(int)
-
-    # Criar colunas base
-    df_berlinda_raw['falta_meta'] = df_berlinda_raw['meta'] - df_berlinda_raw['faturamento_mes']
-
-    # Inicializar colunas
-    df_berlinda_raw['dias_necessarios'] = 0
-    df_berlinda_raw['potencial_max'] = df_berlinda_raw['faturamento_mes']
-    df_berlinda_raw['potencial_realista'] = df_berlinda_raw['faturamento_mes']
-
-    # Calcular só onde há dias disponíveis
-    mask_com_dias = df_berlinda_raw['dias_disponiveis'] > 0
-    df_berlinda_raw.loc[mask_com_dias, 'potencial_max'] = (
-        df_berlinda_raw.loc[mask_com_dias, 'faturamento_mes'] +
-        df_berlinda_raw.loc[mask_com_dias, 'dias_disponiveis'] * df_berlinda_raw.loc[mask_com_dias, 'media_preco_disponivel']
-    )
-    df_berlinda_raw.loc[mask_com_dias, 'potencial_realista'] = (
-        df_berlinda_raw.loc[mask_com_dias, 'faturamento_mes'] +
-        df_berlinda_raw.loc[mask_com_dias, 'to_listings'] *
-        df_berlinda_raw.loc[mask_com_dias, 'dias_disponiveis'] *
-        df_berlinda_raw.loc[mask_com_dias, 'media_preco_disponivel']
-    )
-
-    # Dias necessários (só se falta_meta > 0 e preço > 0)
-    mask_calc = (
-        mask_com_dias &
-        (df_berlinda_raw['falta_meta'] > 0) &
-        (df_berlinda_raw['media_preco_disponivel'] > 0)
-    )
-    df_berlinda_raw.loc[mask_calc, 'dias_necessarios'] = np.ceil(
-        df_berlinda_raw.loc[mask_calc, 'falta_meta'] / df_berlinda_raw.loc[mask_calc, 'media_preco_disponivel']
-    ).astype(int)
-
-    # --- STATUS OPERACIONAL (5 categorias, sem "folga") ---
-    def definir_status(row):
-        if row['faturamento_mes'] < row['meta']:
-            if row['dias_disponiveis'] == 0:
-                return "🔴 Abaixo inviável"
-            elif row['dias_necessarios'] <= row['dias_disponiveis'] and row['potencial_realista'] >= row['meta']:
-                return "🟢 Abaixo viável"
-            elif row['dias_necessarios'] <= row['dias_disponiveis']:
-                return "🟠 Abaixo precisa esforço"
-            else:
-                return "🔴 Abaixo inviável"
-        else:
-            if row['dias_disponiveis'] == 0:
-                return "🟡 Acima sem ação"
-            else:
-                return "🟡 Acima com risco"  # ÚNICO status para acima com dias
-
-    df_berlinda_raw['status_operacional'] = df_berlinda_raw.apply(definir_status, axis=1)
-
-    # --- SCORE DE PRIORIDADE (simétrico) ---
-    def calcular_score(row):
-        if row['dias_disponiveis'] == 0:
-            return 0.0
-        try:
-            if row['faturamento_mes'] < row['meta']:
-                if row['dias_necessarios'] <= 0 or row['dias_necessarios'] > row['dias_disponiveis']:
-                    return 0.0
-                return (row['falta_meta'] / row['meta']) * \
-                       (1 / row['dias_disponiveis']) * \
-                       (row['potencial_max'] - row['faturamento_mes']) * \
-                       (1 / row['dias_necessarios'])
-            else:
-                desvio = abs(row['atingimento_meta'] - 1.0)
-                proximidade = max(1 - desvio, 0.01)
-                return proximidade * row['dias_disponiveis'] * row['media_preco_disponivel']
-        except:
-            return 0.0
-
-    df_berlinda_raw['score_bruto'] = df_berlinda_raw.apply(calcular_score, axis=1)
-
-    # Rank percentil (evita outliers)
-    validos = df_berlinda_raw['score_bruto'] > 0
-    df_berlinda_raw['score_normalizado'] = 0.0
-    if validos.sum() > 1:
-        scores = df_berlinda_raw.loc[validos, 'score_bruto']
-        ranks = scores.rank(method='min', ascending=False) - 1
-        max_rank = len(ranks) - 1
-        df_berlinda_raw.loc[validos, 'score_normalizado'] = (ranks / max_rank) * 100
-    elif validos.sum() == 1:
-        df_berlinda_raw.loc[validos, 'score_normalizado'] = 100.0
-
-    df_berlinda_raw['score_normalizado'] = df_berlinda_raw['score_normalizado'].round(2)
-
-    # Faixa de prioridade
-    def classificar_prioridade(score):
-        if score >= 80:
-            return "Crítico"
-        elif score >= 50:
-            return "Alta"
-        elif score >= 20:
-            return "Média"
-        else:
-            return "Baixa"
-    df_berlinda_raw['faixa_prioridade'] = df_berlinda_raw['score_normalizado'].apply(classificar_prioridade)
-
-    # --- AGORA USAR df_berlinda_raw como base para todos os componentes ---
-    df_berlinda_filtered = df_berlinda_raw
+    required_columns = [
+        'status_operacional', 'faixa_prioridade', 'score_normalizado', 
+        'dias_disponiveis', 'falta_meta'
+    ]
+    missing_columns = [col for col in required_columns if col not in df_berlinda_filtered.columns]
+    
+    if missing_columns:
+        st.error(f"🛠️ Formato de Dados Incompatível")
+        st.write(f"O arquivo da Berlinda (`{berlinda_snapshot}`) parece ser de uma versão antiga ou está incompleto.")
+        st.write(f"**Colunas faltando:** `{', '.join(missing_columns)}`")
+        st.info("💡 **Solução:** Execute novamente o script de preparação de dados (`scripts/2_data_prepar.py`) para regerar os arquivos no formato correto.")
+        st.stop()
+    # ==============================================================================
+    # FIM DA CORREÇÃO
+    # ==============================================================================
 
     # --- KPIs da Berlinda ---
     total_berlinda = len(df_berlinda_filtered)
@@ -544,10 +543,10 @@ with tab2:
     ordem_map = {"Crítico": 4, "Alta": 3, "Média": 2, "Baixa": 1}
     df_tabela_filtrada = df_tabela_filtrada.copy()
     df_tabela_filtrada['ordem'] = df_tabela_filtrada['faixa_prioridade'].map(ordem_map)
-    df_tabela_final = df_tabela_filtrada#[col_order].sort_values(
-    #    ['ordem', 'score_normalizado', 'dias_necessarios'],
-    #    ascending=[False, False, True]
-    #).drop(columns=['ordem'], errors='ignore')
+    df_tabela_final = df_tabela_filtrada.sort_values(
+        ['ordem', 'score_normalizado', 'dias_necessarios'],
+        ascending=[False, False, True]
+    ).drop(columns=['ordem'], errors='ignore')
 
     st.dataframe(df_tabela_final, use_container_width=True, height=500)
 

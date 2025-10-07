@@ -66,8 +66,8 @@ df_merged = df_meta.merge(df_prices, on="listing", how="left")
 df_final = df_merged.merge(df_location, on="listing", how="left")
 print(df_final.columns)
 print(f"✅ Merge concluído")
-print(f"   - df_meta: {len(df_meta)} linhas")
-print(f"   - df_final: {len(df_final)} linhas")
+print(f" - df_meta: {len(df_meta)} linhas")
+print(f" - df_final: {len(df_final)} linhas")
 
 # %%
 # Reordenar colunas
@@ -136,6 +136,18 @@ print("\n🎯 Calculando métricas específicas para Berlinda...")
 df_berlinda = df_final[df_final["grupo_criticidade"] == "berlinda"].copy()
 
 if len(df_berlinda) > 0:
+    # <<< CORREÇÃO 1: Extrair a data de referência do DataFrame
+    # Isso garante que o cálculo dos dias disponíveis seja preciso
+    data_execucao_berlinda = pd.to_datetime(df_berlinda['data_da_execucao'].iloc[0])
+    ULTIMO_DIA_MES = data_execucao_berlinda + pd.offsets.MonthEnd(0)
+    
+    # <<< CORREÇÃO 2: Calcular 'dias_disponiveis' com base na data de execução
+    if data_execucao_berlinda.date() == ULTIMO_DIA_MES.date():
+        df_berlinda['dias_disponiveis'] = 0
+    else:
+        dias_restantes = (ULTIMO_DIA_MES - data_execucao_berlinda).days
+        df_berlinda['dias_disponiveis'] = df_berlinda['ocupacao_ainda_disponivel'].clip(upper=dias_restantes).fillna(0).astype(int)
+
     # Calcular métricas adicionais
     df_berlinda["falta_meta"] = df_berlinda["meta"] - df_berlinda["faturamento_mes"]
     
@@ -149,19 +161,19 @@ if len(df_berlinda) > 0:
     # Calcular potencial máximo
     df_berlinda["potencial_max"] = (
         df_berlinda["faturamento_mes"] + 
-        (df_berlinda["ocupacao_ainda_disponivel"] * df_berlinda["media_preco_disponivel"])
+        (df_berlinda["dias_disponiveis"] * df_berlinda["media_preco_disponivel"]) # <<< Usar a nova coluna
     )
     
     # Calcular potencial realista
     df_berlinda["potencial_realista"] = (
         df_berlinda["faturamento_mes"] + 
-        (df_berlinda["to_listings"] * df_berlinda["ocupacao_ainda_disponivel"] * df_berlinda["media_preco_disponivel"])
+        (df_berlinda["to_listings"] * df_berlinda["dias_disponiveis"] * df_berlinda["media_preco_disponivel"]) # <<< Usar a nova coluna
     )
     
     # Calcular score bruto
     df_berlinda["score_bruto"] = (
         (df_berlinda["falta_meta"] / df_berlinda["meta"]) *
-        (1 / df_berlinda["ocupacao_ainda_disponivel"].replace(0, 1)) *
+        (1 / df_berlinda["dias_disponiveis"].replace(0, 1)) * # <<< Usar a nova coluna
         (df_berlinda["potencial_max"] - df_berlinda["faturamento_mes"]) *
         (1 / df_berlinda["dias_necessarios"].replace(0, 1))
     )
@@ -169,21 +181,23 @@ if len(df_berlinda) > 0:
     # Normalizar score por rank percentil
     df_berlinda["score_normalizado"] = df_berlinda["score_bruto"].rank(pct=True) * 100
     
-    # Classificar prioridade
+    # <<< CORREÇÃO 3: Atualizar a função e o nome da coluna de prioridade
     def classificar_prioridade(score):
         if score >= 80:
-            return "Crítica"
+            return "Crítico"
         elif score >= 50:
+            return "Alta"
+        elif score >= 20:
             return "Média"
         else:
             return "Baixa"
     
-    df_berlinda["prioridade"] = df_berlinda["score_normalizado"].apply(classificar_prioridade)
+    df_berlinda["faixa_prioridade"] = df_berlinda["score_normalizado"].apply(classificar_prioridade) # <<< Nome da coluna corrigido
     
     # Classificar status operacional
     def classificar_status(row):
         if row["atingimento_meta"] >= 1.0:
-            if row["ocupacao_ainda_disponivel"] > 0:
+            if row["dias_disponiveis"] > 0: # <<< Usar a nova coluna
                 if row["potencial_realista"] > row["meta"] * 1.1:
                     return "🟢 Acima com folga"
                 else:
@@ -191,9 +205,9 @@ if len(df_berlinda) > 0:
             else:
                 return "🟡 Acima sem ação"
         else:
-            if row["ocupacao_ainda_disponivel"] == 0:
+            if row["dias_disponiveis"] == 0: # <<< Usar a nova coluna
                 return "🔴 Abaixo inviável"
-            elif row["dias_necessarios"] <= row["ocupacao_ainda_disponivel"] and row["potencial_realista"] >= row["meta"]:
+            elif row["dias_necessarios"] <= row["dias_disponiveis"] and row["potencial_realista"] >= row["meta"]: # <<< Usar a nova coluna
                 return "🟢 Abaixo viável"
             else:
                 return "🟠 Abaixo precisa esforço"
@@ -219,7 +233,7 @@ if not df_final.empty:
 else:
     # Fallback: caso o DataFrame esteja vazio, usa a data atual
     run_date_str = pd.to_datetime('today').strftime('%Y-%m-%d')
-    print("⚠️ DataFrame final vazio. Usando data atual para o nome do arquivo.")
+print("⚠️ DataFrame final vazio. Usando data atual para o nome do arquivo.")
 
 # O nome do arquivo agora inclui a data da execução
 output_final = os.path.join(PROCESSED_DIR, f"meta_analysis_final_enriched_{run_date_str}.csv")
@@ -234,6 +248,7 @@ if len(df_berlinda) > 0:
     print(f"✅ Salvo: {output_berlinda}")
 
 # %%
+# %%
 # Exibir estatísticas finais
 print("\n📊 Estatísticas finais:")
 print(f"📈 Total de imóveis analisados: {len(df_final)}")
@@ -243,8 +258,9 @@ if len(df_berlinda) > 0:
     print("\n📋 Distribuição de status na Berlinda:")
     print(df_berlinda["status_operacional"].value_counts())
     
+    # <<< CORREÇÃO: Alterar o nome da coluna para 'faixa_prioridade'
     print("\n📋 Distribuição de prioridade na Berlinda:")
-    print(df_berlinda["prioridade"].value_counts())
+    print(df_berlinda["faixa_prioridade"].value_counts())
 
 print("\n📉 Valores nulos no DataFrame final:")
 print(df_final.isnull().sum())
