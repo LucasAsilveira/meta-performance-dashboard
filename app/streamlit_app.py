@@ -324,15 +324,17 @@ with tab1:
 
     # --- TABELA COMPLETA --- (O código da tabela já existe depois daqui)
 
-        # --- SCATTER PLOT ---
+    # --- SCATTER PLOT ---
     st.subheader("Scatter Plot: Análise de Performance")
-    st.caption("Explore a relação entre as métricas de performance.")
+    st.caption("Explore a relação entre as métricas de performance e impacto financeiro.")
 
-    # <<< ALTERAÇÃO: Opções de eixo e escala
-    # Opções para o eixo secundário (que não é o atingimento)
+    # <<< ALTERAÇÃO: Adicionar novas opções de eixo
     secondary_axis_options = {
         "Dias Disponíveis": 'ocupacao_ainda_disponivel',
-        "Taxa de Ocupação (TO)": 'to_listings'
+        "Taxa de Ocupação (TO)": 'to_listings',
+        "Dias Bloqueados": 'dias_bloqueados', 
+        "Falta para a Meta": 'falta_meta',
+        "Faturamento Perdido (Bloqueio)": 'faturamento_perdido_bloqueio'
     }
 
     # Radio button para escolher a variável para o eixo X
@@ -351,6 +353,9 @@ with tab1:
         x_col, y_col = y_col, x_col
         x_axis_label, y_axis_label = y_axis_label, x_axis_label
 
+    # <<< ALTERAÇÃO: Adicionar opção de cor
+    color_by = st.radio("Colorir por:", options=["Grupo de Criticidade", "Cidade"], horizontal=True)
+    
     # Radio button para escolher a escala do eixo Y
     scale_type = st.radio("Escala do Eixo Y:", options=["Normal", "Logarítmica"], horizontal=True)
 
@@ -367,7 +372,26 @@ with tab1:
             st.warning(f"Não há dados com {y_axis_label} > 0 para exibir na escala logarítmica.")
             st.stop()
 
-    hover_cols = ['listing', 'categoria', 'carteira', 'estado', 'cidade']
+    # <<< ALTERAÇÃO: Lógica de cor
+    if color_by == "Grupo de Criticidade":
+        color_col = 'grupo_criticidade'
+        color_discrete_map = {
+            "crítico": "#d32f2f",
+            "atenção": "#f57c00",
+            "berlinda": "#388e3c",
+            "ok": "#1976d2",
+            "meta_subestimada": "#7b1fa2"
+        }
+        title_suffix = ""
+    else: # Colorir por Cidade
+        color_col = 'cidade'
+        # Para não poluir, vamos colorir apenas as top 10 cidades e agrupar as demais
+        top_cities = df_scatter[color_col].value_counts().nlargest(10).index
+        df_scatter[color_col] = df_scatter[color_col].apply(lambda x: x if x in top_cities else 'Outras')
+        color_discrete_map = None # Deixa o Plotly escolher as cores
+        title_suffix = " (Top 10 Cidades)"
+
+    hover_cols = ['listing', 'categoria', 'carteira', 'estado']
     if x_col not in hover_cols:
         hover_cols.append(x_col)
     if y_col not in hover_cols:
@@ -379,28 +403,23 @@ with tab1:
         df_scatter,
         x=x_col,
         y=y_col,
-        color='grupo_criticidade',
-        color_discrete_map={
-            "crítico": "#d32f2f",
-            "atenção": "#f57c00",
-            "berlinda": "#388e3c",
-            "ok": "#1976d2",
-            "meta_subestimada": "#7b1fa2"
-        },
+        color=color_col,
+        color_discrete_map=color_discrete_map,
         hover_data=valid_hover_cols,
         labels={
             x_col: x_axis_label,
             y_col: y_axis_label,
-            'grupo_criticidade': 'Grupo de Criticidade'
+            'grupo_criticidade': 'Grupo de Criticidade',
+            'cidade': 'Cidade'
         },
-        title=f"{y_axis_label} vs {x_axis_label}"
+        title=f"{y_axis_label} vs {x_axis_label}{title_suffix}"
     )
     
-    # <<< ALTERAÇÃO: Aplicar escala logarítmica condicionalmente
+    # Aplicar escala logarítmica condicionalmente
     if scale_type == "Logarítmica":
         fig2.update_layout(yaxis_type="log")
     
-    # <<< ALTERAÇÃO: Adicionar linhas de referência condicionalmente
+    #  Adicionar linhas de referência condicionalmente
     # Se 'atingimento_meta' está no eixo Y, usamos hlines (linhas horizontais)
     if y_col == 'atingimento_meta':
         fig2.add_hline(y=0.5, line_dash="dot", line_color="#d32f2f", annotation_text="50% (Crítico)")
@@ -414,13 +433,20 @@ with tab1:
         fig2.add_vline(x=1.0, line_dash="solid", line_color="green", annotation_text="100% (Meta)")
         fig2.add_vline(x=1.1, line_dash="dot", line_color="#1976d2", annotation_text="110% (OK)")
 
-    # Formatar o eixo de atingimento como porcentagem
-    if y_col == 'atingimento_meta':
-        fig2.update_layout(yaxis_tickformat='.0%')
+    # <<< ALTERAÇÃO: Formatar eixos financeiros e de porcentagem
+    # Formatar eixo X
+    if x_col in ['falta_meta', 'faturamento_perdido_bloqueio']:
+        fig2.update_layout(xaxis_tickformat='R$,.0f')
     elif x_col == 'atingimento_meta':
         fig2.update_layout(xaxis_tickformat='.0%')
+
+    # Formatar eixo Y
+    if y_col in ['falta_meta', 'faturamento_perdido_bloqueio']:
+        fig2.update_layout(yaxis_tickformat='R$,.0f')
+    elif y_col == 'atingimento_meta':
+        fig2.update_layout(yaxis_tickformat='.0%')
         
-    st.plotly_chart(fig2, use_container_width=True)    
+    st.plotly_chart(fig2, use_container_width=True) 
 
     # --- TABELA COMPLETA ---
     st.subheader("Tabela Completa (com filtros aplicados)")
