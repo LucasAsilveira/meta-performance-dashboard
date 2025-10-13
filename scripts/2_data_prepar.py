@@ -108,6 +108,24 @@ df_final["atingimento_meta"] = df_final.apply(
     axis=1
 )
 
+# %%
+# Calcular métricas de impacto financeiro
+print("\n💰 Calculando métricas de impacto financeiro...")
+
+# Garantir que as colunas sejam numéricas para o cálculo, tratando erros
+df_final['dias_bloqueados'] = pd.to_numeric(df_final['dias_bloqueados'], errors='coerce').fillna(0)
+df_final['media_preco_ocupado'] = pd.to_numeric(df_final['media_preco_ocupado'], errors='coerce').fillna(0)
+df_final['faturamento_mes'] = pd.to_numeric(df_final['faturamento_mes'], errors='coerce').fillna(0)
+df_final['meta'] = pd.to_numeric(df_final['meta'], errors='coerce').fillna(0)
+
+# Calcular Faturamento Perdido por Bloqueio
+df_final['faturamento_perdido_bloqueio'] = df_final['dias_bloqueados'] * df_final['media_preco_ocupado']
+
+# Calcular Falta para a Meta
+df_final['falta_meta'] = df_final['meta'] - df_final['faturamento_mes']
+
+print("✅ Métricas de impacto financeiro calculadas")
+
 # Classificar grupo de criticidade
 def classificar_criticidade(atingimento):
     if atingimento <= 0.5:
@@ -136,21 +154,16 @@ print("\n🎯 Calculando métricas específicas para Berlinda...")
 df_berlinda = df_final[df_final["grupo_criticidade"] == "berlinda"].copy()
 
 if len(df_berlinda) > 0:
-    # <<< CORREÇÃO 1: Extrair a data de referência do DataFrame
-    # Isso garante que o cálculo dos dias disponíveis seja preciso
+
     data_execucao_berlinda = pd.to_datetime(df_berlinda['data_da_execucao'].iloc[0])
     ULTIMO_DIA_MES = data_execucao_berlinda + pd.offsets.MonthEnd(0)
     
-    # <<< CORREÇÃO 2: Calcular 'dias_disponiveis' com base na data de execução
     if data_execucao_berlinda.date() == ULTIMO_DIA_MES.date():
         df_berlinda['dias_disponiveis'] = 0
     else:
         dias_restantes = (ULTIMO_DIA_MES - data_execucao_berlinda).days
-        df_berlinda['dias_disponiveis'] = df_berlinda['ocupacao_ainda_disponivel'].clip(upper=dias_restantes).fillna(0).astype(int)
+        df_berlinda['dias_disponiveis'] = df_berlinda['ocupacao_ainda_disponivel'].clip(upper=dias_restantes).fillna(0).astype(int)   
 
-    # Calcular métricas adicionais
-    df_berlinda["falta_meta"] = df_berlinda["meta"] - df_berlinda["faturamento_mes"]
-    
     # Calcular dias necessários (evitar divisão por zero)
     df_berlinda["dias_necessarios"] = df_berlinda.apply(
         lambda row: np.ceil(row["falta_meta"] / row["media_preco_disponivel"]) 
