@@ -269,6 +269,61 @@ with tab1:
     )
     st.plotly_chart(fig_heatmap, use_container_width=True)
 
+        # ==============================================================================
+    # ANÁLISE DE IMPACTO POR CIDADE (CONDICIONAL)
+    # ==============================================================================
+    if len(estado_sel) == 1:
+        st.info(f"📍 Filtro de Estado detectado. Exibindo análise de impacto para as cidades de **{estado_sel[0]}**.")
+        st.subheader("📉 Impacto de Bloqueio e Falta de Meta por Cidade")
+
+        # 1. Filtrar e agrupar dados pelo estado selecionado
+        df_cidade = df_filtered[df_filtered['estado'] == estado_sel[0]].copy()
+        df_grouped = df_cidade.groupby('cidade')[['faturamento_perdido_bloqueio', 'falta_meta']].sum().reset_index()
+
+        # 2. Lidar com valores nulos e ordenar pelo impacto total
+        df_grouped.fillna(0, inplace=True)
+        df_grouped['impacto_total'] = df_grouped['faturamento_perdido_bloqueio'] + df_grouped['falta_meta']
+        df_grouped.sort_values('impacto_total', ascending=False, inplace=True)
+
+        # 3. Adicionar um slider para o usuário escolher quantas cidades exibir
+        top_n = st.slider("Mostrar Top N cidades:", min_value=5, max_value=20, value=10, step=1)
+        df_grouped_top = df_grouped.head(top_n)
+
+        # 4. Preparar dados para o gráfico (formato "longo" para barras agrupadas)
+        df_melted = df_grouped_top.melt(
+            id_vars='cidade',
+            value_vars=['faturamento_perdido_bloqueio', 'falta_meta'],
+            var_name='Tipo de Impacto',
+            value_name='Valor (R$)'
+        )
+
+        # 5. Criar o gráfico de barras agrupadas
+        fig_impacto = px.bar(
+            df_melted,
+            x='cidade',
+            y='Valor (R$)',
+            color='Tipo de Impacto',
+            barmode='group',
+            title=f"Top {top_n} Cidades com Maior Impacto Financeiro em {estado_sel[0]}",
+            labels={
+                'cidade': 'Cidade',
+                'Valor (R$)': 'Valor (R$)',
+                'faturamento_perdido_bloqueio': 'Faturamento Perdido por Bloqueio',
+                'falta_meta': 'Falta para a Meta'
+            },
+            color_discrete_map={
+                'faturamento_perdido_bloqueio': '#e74c3c',  # Vermelho para perda
+                'falta_meta': '#3498db'                  # Azul para falta
+            }
+        )
+        fig_impacto.update_layout(yaxis_tickformat='R$,.0f', xaxis_tickangle=-45)
+        st.plotly_chart(fig_impacto, use_container_width=True)
+    # ==============================================================================
+    # FIM DA NOVA SEÇÃO
+    # ==============================================================================
+
+    # --- TABELA COMPLETA --- (O código da tabela já existe depois daqui)
+
         # --- SCATTER PLOT ---
     st.subheader("Scatter Plot: Análise de Performance")
     st.caption("Explore a relação entre as métricas de performance.")
