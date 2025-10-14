@@ -183,19 +183,34 @@ if len(df_berlinda) > 0:
         (df_berlinda["to_listings"] * df_berlinda["dias_disponiveis"] * df_berlinda["media_preco_disponivel"]) # <<< Usar a nova coluna
     )
     
-    # Calcular score bruto
-    df_berlinda["score_bruto"] = (
-        (df_berlinda["falta_meta"] / df_berlinda["meta"]) *
-        (1 / df_berlinda["dias_disponiveis"].replace(0, 1)) * # <<< Usar a nova coluna
-        (df_berlinda["potencial_max"] - df_berlinda["faturamento_mes"]) *
-        (1 / df_berlinda["dias_necessarios"].replace(0, 1))
-    )
+    # <<< ALTERAÇÃO COMPLETA: Lógica de Score Separada para Acima e Abaixo da Meta
     
-    # Normalizar score por rank percentil
-    df_berlinda["score_normalizado"] = df_berlinda["score_bruto"].rank(pct=True) * 100
-    
-    # <<< CORREÇÃO 3: Atualizar a função e o nome da coluna de prioridade
-    def classificar_prioridade(score):
+    # 1. Separar os DataFrames
+    df_berlinda_abaixo = df_berlinda[df_berlinda["atingimento_meta"] < 1.0].copy()
+    df_berlinda_acima = df_berlinda[df_berlinda["atingimento_meta"] >= 1.0].copy()
+
+    # --- LÓGICA PARA QUEM ESTÁ ABAIXO DA META ---
+    if not df_berlinda_abaixo.empty:
+        # Calcular score bruto (fórmula existente)
+        df_berlinda_abaixo["score_bruto"] = (
+            (df_berlinda_abaixo["falta_meta"] / df_berlinda_abaixo["meta"]) *
+            (1 / df_berlinda_abaixo["dias_disponiveis"].replace(0, 1)) *
+            (df_berlinda_abaixo["potencial_max"] - df_berlinda_abaixo["faturamento_mes"]) *
+            (1 / df_berlinda_abaixo["dias_necessarios"].replace(0, 1))
+        )
+        # Normalizar score por rank percentil (apenas para este grupo)
+        df_berlinda_abaixo["score_normalizado"] = df_berlinda_abaixo["score_bruto"].rank(pct=True) * 100
+
+    # --- LÓGICA PARA QUEM JÁ BATEU A META (FOCO EM RISCO) ---
+    if not df_berlinda_acima.empty:
+        # Novo score de risco: quanto mais dias disponíveis e mais perto de 100%, maior o risco.
+        # Usamos (atingimento_meta - 1.0) para dar peso a quem está mais perto da meta.
+        df_berlinda_acima["score_risco_bruto"] = df_berlinda_acima["dias_disponiveis"] * (1 / (df_berlinda_acima["atingimento_meta"] - 0.99))
+        # Normalizar score de risco por rank percentil (apenas para este grupo)
+        df_berlinda_acima["score_normalizado"] = df_berlinda_acima["score_risco_bruto"].rank(pct=True) * 100
+
+    # --- CLASSIFICAÇÃO DE PRIORIDADE / RISCO ---
+    def classificar_prioridade_abaixo(score):
         if score >= 80:
             return "Crítico"
         elif score >= 50:
@@ -204,8 +219,25 @@ if len(df_berlinda) > 0:
             return "Média"
         else:
             return "Baixa"
-    
-    df_berlinda["faixa_prioridade"] = df_berlinda["score_normalizado"].apply(classificar_prioridade) # <<< Nome da coluna corrigido
+
+    def classificar_prioridade_acima(score):
+        if score >= 80:
+            return "Risco Alto"
+        elif score >= 50:
+            return "Risco Médio"
+        elif score >= 20:
+            return "Risco Baixo"
+        else:
+            return "Sem Risco"
+            
+    # Aplicar a classificação correta a cada DataFrame
+    if not df_berlinda_abaixo.empty:
+        df_berlinda_abaixo["faixa_prioridade"] = df_berlinda_abaixo["score_normalizado"].apply(classificar_prioridade_abaixo)
+    if not df_berlinda_acima.empty:
+        df_berlinda_acima["faixa_prioridade"] = df_berlinda_acima["score_normalizado"].apply(classificar_prioridade_acima)
+
+    # --- RECOMBINAR OS DATAFRAMES ---
+    df_berlinda = pd.concat([df_berlinda_abaixo, df_berlinda_acima], ignore_index=True)
     
     # Classificar status operacional
     def classificar_status(row):
