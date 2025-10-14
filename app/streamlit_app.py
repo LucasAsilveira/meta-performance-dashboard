@@ -30,6 +30,39 @@ def load_data(filename):
         st.error(f"Ocorreu um erro ao carregar o arquivo {filename}: {e}")
         return pd.DataFrame()
 
+@st.cache_data
+def load_all_snapshots():
+    """Carrega e combina todos os snapshots de dados disponíveis."""
+    all_files = os.listdir(DATA_PROCESSED_PATH)
+    snapshot_files = sorted(
+        [f for f in all_files if f.startswith('meta_analysis_final_enriched_') and f.endswith('.csv')],
+        reverse=True
+    )
+    
+    if not snapshot_files:
+        return pd.DataFrame()
+
+    df_list = []
+    for filename in snapshot_files:
+        file_path = os.path.join(DATA_PROCESSED_PATH, filename)
+        try:
+            df = pd.read_csv(file_path)
+            # Garante que a coluna de data esteja no formato correto
+            df['data_da_execucao'] = pd.to_datetime(df['data_da_execucao'])
+            df_list.append(df)
+        except Exception as e:
+            st.warning(f"Não foi possível ler o arquivo {filename}: {e}")
+            
+    if not df_list:
+        return pd.DataFrame()
+        
+    df_historico = pd.concat(df_list, ignore_index=True)
+    
+    # Correção do atingimento da meta, se necessário
+    if 'atingimento_meta' in df_historico.columns and df_historico['atingimento_meta'].max() > 5:
+        df_historico['atingimento_meta'] = df_historico['atingimento_meta'] / 100
+        
+    return df_historico
 
 @st.cache_data
 def load_berlinda(filename):
@@ -185,48 +218,124 @@ with tab1:
     col_kpi2.metric("Na Berlinda (80–110%)", f"{perc_berlinda:.1f}%")
     col_kpi3.metric("Com Potencial de Ação", f"{len(berlinda_com_potencial)}")
 
-    # --- GRÁFICO DE BARRAS ---
+    # --- GRÁFICO DE BARRAS / EVOLUÇÃO ---
     st.subheader("Distribuição por Grupo de Criticidade")
-    criticidade_counts = df_filtered["grupo_criticidade"].value_counts().reset_index()
-    criticidade_counts.columns = ["grupo_criticidade", "quantidade"]
-    total = criticidade_counts["quantidade"].sum()
-    criticidade_counts["percentual"] = (criticidade_counts["quantidade"] / total * 100).round(1)
-    criticidade_counts["percentual_str"] = criticidade_counts["percentual"].astype(str) + "%"
+    
+    show_evolution = st.checkbox("Ver Evolução no Mês", value=False)
 
-    ordem = ["crítico", "atenção", "berlinda", "ok", "meta_subestimada"]
-    criticidade_counts["grupo_criticidade"] = pd.Categorical(
-        criticidade_counts["grupo_criticidade"], categories=ordem, ordered=True
-    )
-    criticidade_counts = criticidade_counts.sort_values("grupo_criticidade")
+    if not show_evolution:
+        # >>> VISÃO ESTÁTICA (Código original)
+        criticidade_counts = df_filtered["grupo_criticidade"].value_counts().reset_index()
+        criticidade_counts.columns = ["grupo_criticidade", "quantidade"]
+        total = criticidade_counts["quantidade"].sum()
+        criticidade_counts["percentual"] = (criticidade_counts["quantidade"] / total * 100).round(1)
+        criticidade_counts["percentual_str"] = criticidade_counts["percentual"].astype(str) + "%"
 
-    label_map = {
-        "crítico": "crítico (≤ 50%)",
-        "atenção": "atenção (50%–80%)",
-        "berlinda": "berlinda (80–110%)",
-        "ok": "ok (110%–200%)",
-        "meta_subestimada": "meta_subestimada (> 200%)"
-    }
-    criticidade_counts["grupo_legenda"] = criticidade_counts["grupo_criticidade"].map(label_map)
+        ordem = ["crítico", "atenção", "berlinda", "ok", "meta_subestimada"]
+        criticidade_counts["grupo_criticidade"] = pd.Categorical(
+            criticidade_counts["grupo_criticidade"], categories=ordem, ordered=True
+        )
+        criticidade_counts = criticidade_counts.sort_values("grupo_criticidade")
 
-    fig1 = px.bar(
-        criticidade_counts,
-        x="grupo_legenda",
-        y="quantidade",
-        text="percentual_str",
-        color="grupo_criticidade",
-        color_discrete_map={
-            "crítico": "#d32f2f",
-            "atenção": "#f57c00",
-            "berlinda": "#388e3c",
-            "ok": "#1976d2",
-            "meta_subestimada": "#7b1fa2"
-        },
-        labels={"grupo_legenda": "Grupo de Criticidade", "quantidade": "Quantidade"},
-        title="Quantidade por Grupo"
-    )
-    fig1.update_traces(textposition="outside")
-    fig1.update_layout(height=600)
-    st.plotly_chart(fig1, use_container_width=True)
+        label_map = {
+            "crítico": "crítico (≤ 50%)",
+            "atenção": "atenção (50%–80%)",
+            "berlinda": "berlinda (80–110%)",
+            "ok": "ok (110%–200%)",
+            "meta_subestimada": "meta_subestimada (> 200%)"
+        }
+        criticidade_counts["grupo_legenda"] = criticidade_counts["grupo_criticidade"].map(label_map)
+
+        fig1 = px.bar(
+            criticidade_counts,
+            x="grupo_legenda",
+            y="quantidade",
+            text="percentual_str",
+            color="grupo_criticidade",
+            color_discrete_map={
+                "crítico": "#d32f2f",
+                "atenção": "#f57c00",
+                "berlinda": "#388e3c",
+                "ok": "#1976d2",
+                "meta_subestimada": "#7b1fa2"
+            },
+            labels={"grupo_legenda": "Grupo de Criticidade", "quantidade": "Quantidade"},
+            title="Quantidade por Grupo"
+        )
+        fig1.update_traces(textposition="outside")
+        st.plotly_chart(fig1, use_container_width=True)
+
+    else:
+        # >>> VISÃO DE EVOLUÇÃO (NOVO CÓDIGO)
+        st.info("📈 Exibindo a evolução dos grupos de criticidade ao longo do mês.")
+        
+        # Carregar dados históricos
+        df_historico = load_all_snapshots()
+        
+        if df_historico.empty:
+            st.warning("Não foi possível carregar os dados históricos para a evolução.")
+            st.stop()
+
+        # Aplicar os filtros da barra lateral nos dados históricos
+        df_hist_filtered = df_historico.copy()
+        if categoria_sel:
+            df_hist_filtered = df_hist_filtered[df_hist_filtered["categoria"].isin(categoria_sel)]
+        if carteira_sel:
+            df_hist_filtered = df_hist_filtered[df_hist_filtered["carteira"].isin(carteira_sel)]
+        if estado_sel:
+            df_hist_filtered = df_hist_filtered[df_hist_filtered["estado"].isin(estado_sel)]
+        if cidade_sel:
+            df_hist_filtered = df_hist_filtered[df_hist_filtered["cidade"].isin(cidade_sel)]
+        if grupo_sel:
+            df_hist_filtered = df_hist_filtered[df_hist_filtered["grupo_criticidade"].isin(grupo_sel)]
+        if dias_min > 0:
+            df_hist_filtered = df_hist_filtered[df_hist_filtered["ocupacao_ainda_disponivel"] >= dias_min]
+
+        if df_hist_filtered.empty:
+            st.warning("Nenhum dado histórico encontrado com os filtros aplicados.")
+            st.stop()
+
+        # Agrupar dados para o gráfico de evolução
+        df_evolution = df_hist_filtered.groupby(['data_da_execucao', 'grupo_criticidade']).size().reset_index(name='quantidade')
+        
+        # Garantir a ordem correta dos grupos no gráfico
+        ordem = ["crítico", "atenção", "berlinda", "ok", "meta_subestimada"]
+        df_evolution['grupo_criticidade'] = pd.Categorical(df_evolution['grupo_criticidade'], categories=ordem, ordered=True)
+        df_evolution = df_evolution.sort_values(by=['data_da_execucao', 'grupo_criticidade'])
+
+        # Criar o gráfico de linhas
+        # Criar o gráfico de linhas
+        fig_evolution = px.line(
+            df_evolution,
+            x='data_da_execucao',
+            y='quantidade',
+            color='grupo_criticidade',
+            markers=True,  # Adiciona marcadores nos pontos
+            text='quantidade', # <<< ADICIONA O TEXTO COM O VALOR
+            color_discrete_map={
+                "crítico": "#d32f2f",
+                "atenção": "#f57c00",
+                "berlinda": "#388e3c",
+                "ok": "#1976d2",
+                "meta_subestimada": "#7b1fa2"
+            },
+            labels={
+                'data_da_execucao': 'Data do Snapshot',
+                'quantidade': 'Quantidade de Imóveis',
+                'grupo_criticidade': 'Grupo de Criticidade'
+            },
+            title="Evolução da Quantidade de Imóveis por Grupo de Criticidade"
+        )
+        
+        # <<< ALTERAÇÃO: Posicionar o texto para não se sobrepor
+        fig_evolution.update_traces(textposition='top center')
+        
+        fig_evolution.update_layout(yaxis_title="Quantidade de Imóveis", xaxis_title='Data do Snapshot')
+        fig_evolution.update_xaxes(tickformat='%d/%m')
+        st.plotly_chart(fig_evolution, use_container_width=True)
+
+        # <<< ADICIONAR LEGENDA EXPLICATIVA
+        st.caption("📈 O gráfico de evolução mostra a quantidade absoluta de imóveis em cada grupo para acompanhar a tendência ao longo do mês.")
 
     # --- HEATMAP ---
     st.subheader("Heatmap: % de Imóveis por Categoria e Grupo de Criticidade")
