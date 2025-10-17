@@ -30,7 +30,7 @@ def load_data(filename):
         st.error(f"Ocorreu um erro ao carregar o arquivo {filename}: {e}")
         return pd.DataFrame()
 
-@st.cache_data
+@st.cache_data(ttl=3600)  # Cache expira em 1 hora (3600 segundos)
 def load_all_snapshots():
     """Carrega e combina todos os snapshots de dados disponíveis."""
     all_files = os.listdir(DATA_PROCESSED_PATH)
