@@ -134,6 +134,18 @@ WHERE
 GROUP BY id_seazone;
 """
 
+# Query 4: Preço Mínimo (Pmin)
+query_pmin = """
+SELECT 
+    listing, 
+    n_dates_special_price
+FROM "auditfatgoaldata-fkjh3fcvp0ed"."seazone_data"
+WHERE 
+    year_month = '2025-10' 
+    and date_trunc('day', acquisition_date) >= current_date
+"""
+
+
 # Executar queries e salvar CSVs
 queries = {
     'meta_analysis_price': query_price,
@@ -143,6 +155,43 @@ queries = {
 
 # Capturar data de execução
 run_date = pd.to_datetime('today').normalize() 
+
+# ==============================================================================
+# Conectar à AWS Athena para a query de Pmin
+# ==============================================================================
+try:
+    import boto3
+    from pyathena import connect
+    print("🔗 Conectando à AWS Athena...")
+    
+    session = boto3.Session(profile_name='sirius-prod')
+    athena_connection = connect(
+        s3_staging_dir='s3://aws-athena-query-results-835316524622-us-west-2/',
+        profile_name='sirius-prod',
+        region_name='us-west-2'
+    )
+    print("✅ Conexão com Athena estabelecida.")
+    
+    # Executar apenas a query de Pmin
+    print(f"Executando query: meta_analysis_pmin")
+    df_pmin = pd.read_sql(query_pmin, athena_connection)
+    
+    # Salvar arquivo com nome fixo
+    output_path = os.path.join(RAW_DIR, 'meta_analysis_pmin.csv')
+    df_pmin.to_csv(output_path, index=False)
+    print(f"Salvo: {output_path}")
+
+except ImportError:
+    print("⚠️ Bibliotecas 'boto3' ou 'PyAthena' não encontradas. Pulando a query de Pmin.")
+    print("Para instalar, execute: pip install boto3 'PyAthena[SQL]'")
+except Exception as e:
+    print(f"❌ Erro ao conectar ou executar a query de Pmin: {e}")
+    print("Verifique suas credenciais AWS e o perfil 'sirius-prod'.")
+
+# ==============================================================================
+# FIM DA CONEXÃO AWS
+# ==============================================================================
+
 
 for name, query in queries.items():
     print(f"Executando query: {name}")

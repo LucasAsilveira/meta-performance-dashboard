@@ -17,14 +17,31 @@ print(f"📂 Lendo arquivos de: {RAW_DIR}")
 print(f"💾 Salvando resultados em: {PROCESSED_DIR}")
 
 # %%
-# Ler os 3 arquivos CSV
+# %%
+# %%
+# Ler os 4 arquivos CSV (incluindo Pmin)
 try:
     df_location = pd.read_csv(os.path.join(RAW_DIR, "meta_analysis_location.csv"))
     df_meta = pd.read_csv(os.path.join(RAW_DIR, "meta_analysis_performance_value_meta.csv"))
     df_prices = pd.read_csv(os.path.join(RAW_DIR, "meta_analysis_price.csv"))
-    print("✅ Todos os arquivos CSV lidos com sucesso")
+    print("✅ Arquivos CSV principais lidos com sucesso")
+
+    # <<< NOVO: Tentar ler o arquivo de Pmin (nome fixo)
+    try:
+        df_pmin = pd.read_csv(os.path.join(RAW_DIR, 'meta_analysis_pmin.csv'))
+        # <<< CORREÇÃO: Remover colunas desnecessárias para não quebrar o merge
+        if 'data_da_execucao' in df_pmin.columns:
+            df_pmin = df_pmin.drop(columns=['data_da_execucao'])
+        print("✅ Arquivo de Pmin lido e limpo com sucesso: meta_analysis_pmin.csv")
+    except FileNotFoundError:
+        df_pmin = pd.DataFrame()
+        print("⚠️ Arquivo 'meta_analysis_pmin.csv' não encontrado. A coluna 'dias_pmin' não será criada.")
+    except Exception as e:
+        df_pmin = pd.DataFrame()
+        print(f"⚠️ Erro inesperado ao ler Pmin: {e}. A coluna 'dias_pmin' não será criada.")
+
 except FileNotFoundError as e:
-    print(f"❌ Erro ao ler arquivos: {e}")
+    print(f"❌ Erro ao ler arquivos principais: {e}")
     print("Execute primeiro o script 1_import_data.py")
     exit(1)
 
@@ -57,15 +74,36 @@ print("\n📌 Colunas de df_prices:")
 print(df_prices.columns.tolist())
 
 # %%
+# %%
 # Fazer merge entre os DataFrames
 print("\n🔗 Realizando merges dos DataFrames...")
 # Primeiro, juntar df_meta com df_prices
 df_merged = df_meta.merge(df_prices, on="listing", how="left")
 
 # Depois, juntar com df_location
-df_final = df_merged.merge(df_location, on="listing", how="left")
+df_merged = df_merged.merge(df_location, on="listing", how="left")
+
+#Juntar com df_pmin, se existir
+if not df_pmin.empty:
+    df_final = df_merged.merge(df_pmin, on="listing", how="left")
+    # Renomear a coluna para o padrão do nosso DataFrame
+    df_final = df_final.rename(columns={'n_dates_special_price': 'dias_pmin'})
+    print("✅ Merge com Pmin concluído.")
+else:
+    df_final = df_merged
+    print("⚠️ Merge com Pmin pulado (arquivo não encontrado).")
+
+#Limpar colunas de data duplicadas do merge
+cols_to_drop = [col for col in df_final.columns if 'data_da_execucao' in col and col != 'data_da_execucao']
+df_final = df_final.drop(columns=cols_to_drop)
+if cols_to_drop:
+    print(f"🧹 Limpando colunas de data duplicadas: {cols_to_drop}")
+
 print(df_final.columns)
-print(f"✅ Merge concluído")
+print(f"✅ Merge geral concluído")
+
+print(df_final.columns)
+print(f"✅ Merge geral concluído")
 print(f" - df_meta: {len(df_meta)} linhas")
 print(f" - df_final: {len(df_final)} linhas")
 
@@ -91,6 +129,7 @@ colunas_ordenadas = [
     "media_preco_ocupado",
     "media_preco_disponivel",
     "ocupacao_ainda_disponivel",
+    "dias_pmin",
     "data_da_execucao"
 ]
 
@@ -146,6 +185,46 @@ df_final["atingimento_meta"] = df_final["atingimento_meta"].round(2)
 
 print("✅ Métricas derivadas calculadas")
 
+# ==============================================================================
+# BLOCO DE DEPURAÇÃO (PARA REMOVER DEPOIS)
+# ==============================================================================
+DEBUG_MODE = True  # Mude para False para desativar os prints
+
+if DEBUG_MODE:
+    print("\n" + "="*50)
+    print("🐛 INICIANDO MODO DEPURAÇÃO")
+    print("="*50)
+
+    # 1. Verificar as colunas base antes de qualquer cálculo
+    print("\n📌 Análise da coluna 'meta' em df_meta:")
+    print(df_meta['meta'].describe())
+    print(f"Quantos 'meta' são zero ou nulos? {(df_meta['meta'].isna() | (df_meta['meta'] == 0)).sum()}")
+
+    print("\n📌 Análise da coluna 'faturamento_mes' em df_meta:")
+    print(df_meta['faturamento_mes'].describe())
+    print(f"Quantos 'faturamento_mes' são zero ou nulos? {(df_meta['faturamento_mes'].isna() | (df_meta['faturamento_mes'] == 0)).sum()}")
+
+    # 2. Verificar o atingimento e a criticidade no DataFrame final
+    print("\n📌 Análise da coluna 'atingimento_meta' em df_final:")
+    print(df_final['atingimento_meta'].describe())
+
+    print("\n📌 DISTRIBUIÇÃO FINAL - Contagem de grupo_criticidade em df_final:")
+    contagem_criticidade = df_final['grupo_criticidade'].value_counts()
+    print(contagem_criticidade)
+    
+    if 'berlinda' not in contagem_criticidade:
+        print("\n🚨 ATENÇÃO: Nenhum imóvel foi classificado como 'berlinda'!")
+    else:
+        print(f"\n✅ Encontrados {contagem_criticidade['berlinda']} imóveis na 'berlinda'.")
+
+    print("="*50)
+    print("🐛 FIM DO MODO DEPURAÇÃO")
+    print("="*50 + "\n")
+# ==============================================================================
+# FIM DO BLOCO DE DEPURAÇÃO
+# ==============================================================================
+
+# %%
 # %%
 # Calcular métricas para a Berlinda
 print("\n🎯 Calculando métricas específicas para Berlinda...")
@@ -153,115 +232,102 @@ print("\n🎯 Calculando métricas específicas para Berlinda...")
 # Filtrar apenas Berlinda
 df_berlinda = df_final[df_final["grupo_criticidade"] == "berlinda"].copy()
 
-if len(df_berlinda) > 0:
+# --- Funções Auxiliares ---
+def calcular_dias_disponiveis(df, data_ref):
+    """Calcula os dias disponíveis com base na data de referência."""
+    ultimo_dia_mes = data_ref + pd.offsets.MonthEnd(0)
+    if data_ref.date() == ultimo_dia_mes.date():
+        return 0
+    dias_restantes = (ultimo_dia_mes - data_ref).days
+    return df['ocupacao_ainda_disponivel'].clip(upper=dias_restantes).fillna(0).astype(int)
 
-    data_execucao_berlinda = pd.to_datetime(df_berlinda['data_da_execucao'].iloc[0])
-    ULTIMO_DIA_MES = data_execucao_berlinda + pd.offsets.MonthEnd(0)
-    
-    if data_execucao_berlinda.date() == ULTIMO_DIA_MES.date():
-        df_berlinda['dias_disponiveis'] = 0
+def calcular_potenciais(df):
+    """Calcula os potenciais máximo e realista."""
+    df["potencial_max"] = (
+        df["faturamento_mes"] + (df["dias_disponiveis"] * df["media_preco_disponivel"])
+    )
+    df["potencial_realista"] = (
+        df["faturamento_mes"] + 
+        (df["to_listings"] * df["dias_disponiveis"] * df["media_preco_disponivel"])
+    )
+
+def classificar_status(row):
+    """Classifica o status operacional de um imóvel."""
+    if row["atingimento_meta"] >= 1.0:
+        return "🟡 Acima com risco" if row["dias_disponiveis"] > 0 else "🟡 Acima sem ação"
     else:
-        dias_restantes = (ULTIMO_DIA_MES - data_execucao_berlinda).days
-        df_berlinda['dias_disponiveis'] = df_berlinda['ocupacao_ainda_disponivel'].clip(upper=dias_restantes).fillna(0).astype(int)   
+        if row["dias_disponiveis"] == 0:
+            return "🔴 Abaixo inviável"
+        return "🟢 Abaixo viável" if row["potencial_realista"] >= row["meta"] else "🟠 Abaixo precisa esforço"
 
-    # Calcular dias necessários (evitar divisão por zero)
-    df_berlinda["dias_necessarios"] = df_berlinda.apply(
-        lambda row: np.ceil(row["falta_meta"] / row["media_preco_disponivel"]) 
-        if row["media_preco_disponivel"] > 0 else 0,
-        axis=1
-    )
+# --- Lógica Principal ---
+if len(df_berlinda) > 0:
+    print(f"🐛 DEBUG: Colunas encontradas no df_berlinda: {df_berlinda.columns.tolist()}")
     
-    # Calcular potencial máximo
-    df_berlinda["potencial_max"] = (
-        df_berlinda["faturamento_mes"] + 
-        (df_berlinda["dias_disponiveis"] * df_berlinda["media_preco_disponivel"]) # <<< Usar a nova coluna
-    )
-    
-    # Calcular potencial realista
-    df_berlinda["potencial_realista"] = (
-        df_berlinda["faturamento_mes"] + 
-        (df_berlinda["to_listings"] * df_berlinda["dias_disponiveis"] * df_berlinda["media_preco_disponivel"]) # <<< Usar a nova coluna
-    )
-    
-    # <<< ALTERAÇÃO COMPLETA: Lógica de Score Separada para Acima e Abaixo da Meta
-    
-    # 1. Separar os DataFrames
-    df_berlinda_abaixo = df_berlinda[df_berlinda["atingimento_meta"] < 1.0].copy()
-    df_berlinda_acima = df_berlinda[df_berlinda["atingimento_meta"] >= 1.0].copy()
-
-    # --- LÓGICA PARA QUEM ESTÁ ABAIXO DA META ---
-    if not df_berlinda_abaixo.empty:
-        # Calcular score bruto (fórmula existente)
-        df_berlinda_abaixo["score_bruto"] = (
-            (df_berlinda_abaixo["falta_meta"] / df_berlinda_abaixo["meta"]) *
-            (1 / df_berlinda_abaixo["dias_disponiveis"].replace(0, 1)) *
-            (df_berlinda_abaixo["potencial_max"] - df_berlinda_abaixo["faturamento_mes"]) *
-            (1 / df_berlinda_abaixo["dias_necessarios"].replace(0, 1))
-        )
-        # Normalizar score por rank percentil (apenas para este grupo)
-        df_berlinda_abaixo["score_normalizado"] = df_berlinda_abaixo["score_bruto"].rank(pct=True) * 100
-
-    # --- LÓGICA PARA QUEM JÁ BATEU A META (FOCO EM RISCO) ---
-    if not df_berlinda_acima.empty:
-        # Novo score de risco: quanto mais dias disponíveis e mais perto de 100%, maior o risco.
-        # Usamos (atingimento_meta - 1.0) para dar peso a quem está mais perto da meta.
-        df_berlinda_acima["score_risco_bruto"] = df_berlinda_acima["dias_disponiveis"] * (1 / (df_berlinda_acima["atingimento_meta"] - 0.99))
-        # Normalizar score de risco por rank percentil (apenas para este grupo)
-        df_berlinda_acima["score_normalizado"] = df_berlinda_acima["score_risco_bruto"].rank(pct=True) * 100
-
-    # --- CLASSIFICAÇÃO DE PRIORIDADE / RISCO ---
-    def classificar_prioridade_abaixo(score):
-        if score >= 80:
-            return "Crítico"
-        elif score >= 50:
-            return "Alta"
-        elif score >= 20:
-            return "Média"
+    # Verificação crítica da coluna de data
+    if 'data_da_execucao' not in df_berlinda.columns or df_berlinda['data_da_execucao'].isnull().all():
+        print("⚠️ A coluna 'data_da_execucao' não foi encontrada ou está toda nula. Pulando o cálculo de métricas.")
+        df_berlinda = pd.DataFrame()
+    else:
+        df_berlinda.dropna(subset=['data_da_execucao'], inplace=True)
+        if df_berlinda.empty:
+            print("⚠️ Após limpar nulos, o df_berlinda ficou vazio. Pulando o cálculo.")
         else:
-            return "Baixa"
+            # Preparação inicial
+            data_ref = pd.to_datetime(df_berlinda['data_da_execucao'].iloc[0])
+            df_berlinda['dias_disponiveis'] = calcular_dias_disponiveis(df_berlinda, data_ref)
+            df_berlinda["dias_necessarios"] = df_berlinda.apply(
+                lambda row: np.ceil(row["falta_meta"] / row["media_preco_disponivel"]) 
+                if row["media_preco_disponivel"] > 0 else 0, axis=1
+            )
+            calcular_potenciais(df_berlinda)
 
-    def classificar_prioridade_acima(score):
-        if score >= 80:
-            return "Risco Alto"
-        elif score >= 50:
-            return "Risco Médio"
-        elif score >= 20:
-            return "Risco Baixo"
-        else:
-            return "Sem Risco"
+            # Separar para cálculo de score
+            df_abaixo = df_berlinda[df_berlinda["atingimento_meta"] < 1.0].copy()
+            df_acima = df_berlinda[df_berlinda["atingimento_meta"] >= 1.0].copy()
+
+            # --- Cálculo de Score para "Abaixo da Meta" ---
+            if not df_abaixo.empty:
+                df_abaixo["score_bruto"] = (
+                    (df_abaixo["falta_meta"] / df_abaixo["meta"]) *
+                    (1 / df_abaixo["dias_disponiveis"].replace(0, 1)) *
+                    (df_abaixo["potencial_max"] - df_abaixo["faturamento_mes"]) *
+                    (1 / df_abaixo["dias_necessarios"].replace(0, 1))
+                )
+                df_abaixo["score_normalizado"] = df_abaixo["score_bruto"].rank(pct=True) * 100
+
+            # --- Cálculo de Score para "Acima da Meta" (Risco) ---
+            if not df_acima.empty:
+                df_acima["score_risco_bruto"] = df_acima["dias_disponiveis"] * (1 / (df_acima["atingimento_meta"] - 0.99))
+                df_acima["score_normalizado"] = df_acima["score_risco_bruto"].rank(pct=True) * 100
+
+            # --- Aplicar Classificações ---
+            def classificar_prioridade_abaixo(score):
+                if score >= 80: return "Crítico"
+                elif score >= 50: return "Alta"
+                elif score >= 20: return "Média"
+                else: return "Baixa"
+
+            def classificar_prioridade_acima(score):
+                if score >= 80: return "Risco Alto"
+                elif score >= 50: return "Risco Médio"
+                elif score >= 20: return "Risco Baixo"
+                else: return "Sem Risco"
+                
+            if not df_abaixo.empty:
+                df_abaixo["faixa_prioridade"] = df_abaixo["score_normalizado"].apply(classificar_prioridade_abaixo)
+                df_abaixo["status_operacional"] = df_abaixo.apply(classificar_status, axis=1)
             
-    # Aplicar a classificação correta a cada DataFrame
-    if not df_berlinda_abaixo.empty:
-        df_berlinda_abaixo["faixa_prioridade"] = df_berlinda_abaixo["score_normalizado"].apply(classificar_prioridade_abaixo)
-    if not df_berlinda_acima.empty:
-        df_berlinda_acima["faixa_prioridade"] = df_berlinda_acima["score_normalizado"].apply(classificar_prioridade_acima)
+            if not df_acima.empty:
+                df_acima["faixa_prioridade"] = df_acima["score_normalizado"].apply(classificar_prioridade_acima)
+                df_acima["status_operacional"] = df_acima.apply(classificar_status, axis=1)
 
-    # --- RECOMBINAR OS DATAFRAMES ---
-    df_berlinda = pd.concat([df_berlinda_abaixo, df_berlinda_acima], ignore_index=True)
-    
-    # Classificar status operacional
-    def classificar_status(row):
-        # >>> REGRA 1: Acima ou igual à meta
-        if row["atingimento_meta"] >= 1.0:
-            if row["dias_disponiveis"] > 0:
-                # Se está na meta ou acima, mas ainda tem dias, está em risco de cair.
-                return "🟡 Acima com risco"
-            else:
-                # Se está na meta ou acima e não tem mais dias, a ação é apenas monitorar.
-                return "🟡 Acima sem ação"
-        # >>> REGRA 2: Abaixo da meta
-        else:
-            if row["dias_disponiveis"] == 0:
-                # Se está abaixo da meta e não tem mais dias, é inviável bater a meta no mês.
-                return "🔴 Abaixo inviável"
-            elif row["potencial_realista"] >= row["meta"]:
-                # Se está abaixo, tem dias e o potencial realista permite bater a meta, é viável.
-                return "🟢 Abaixo viável"
-            else:
-                # Se está abaixo, tem dias, mas mesmo com o potencial realista não bate a meta, precisa de esforço.
-                return "🟠 Abaixo precisa esforço"
-    
-    df_berlinda["status_operacional"] = df_berlinda.apply(classificar_status, axis=1)
+            # --- Recombinar e Finalizar ---
+            df_berlinda = pd.concat([df_abaixo, df_acima], ignore_index=True)
+            print(f"✅ Métricas da Berlinda calculadas para {len(df_berlinda)} imóveis.")
+
+else:
+    print("⚠️ Nenhum imóvel encontrado na Berlinda neste snapshot.")
 
 # %%
 # Salvar resultados
@@ -298,13 +364,15 @@ print("\n📊 Estatísticas finais:")
 print(f"📈 Total de imóveis analisados: {len(df_final)}")
 print(f"🎯 Imóveis na Berlinda: {len(df_berlinda)}")
 
-if len(df_berlinda) > 0:
+# <<< NOVA VERIFICAÇÃO: Mostrar estatísticas da Berlinda apenas se ela não estiver vazia
+if not df_berlinda.empty and 'status_operacional' in df_berlinda.columns:
     print("\n📋 Distribuição de status na Berlinda:")
     print(df_berlinda["status_operacional"].value_counts())
     
-    # <<< CORREÇÃO: Alterar o nome da coluna para 'faixa_prioridade'
     print("\n📋 Distribuição de prioridade na Berlinda:")
     print(df_berlinda["faixa_prioridade"].value_counts())
+else:
+    print("\n📋 Não há dados da Berlinda para exibir as estatísticas.")
 
 print("\n📉 Valores nulos no DataFrame final:")
 print(df_final.isnull().sum())
