@@ -431,8 +431,6 @@ with tab1:
     # FIM DA NOVA SEÇÃO
     # ==============================================================================
 
-    # --- TABELA COMPLETA --- (O código da tabela já existe depois daqui)
-
     # --- SCATTER PLOT ---
     st.subheader("Scatter Plot: Análise de Performance")
     st.caption("Explore a relação entre as métricas de performance e impacto financeiro.")
@@ -442,6 +440,7 @@ with tab1:
         "Dias Disponíveis": 'ocupacao_ainda_disponivel',
         "Taxa de Ocupação (TO)": 'to_listings',
         "Dias Bloqueados": 'dias_bloqueados', 
+        "Dias em Pmin": 'dias_pmin',
         "Falta para a Meta": 'falta_meta',
         "Faturamento Perdido (Bloqueio)": 'faturamento_perdido_bloqueio'
     }
