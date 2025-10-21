@@ -127,7 +127,7 @@ except FileNotFoundError:
 
 
 # Título
-st.title("📊 Meta Performance Dashboard  [V-1.02]")
+st.title("📊 Meta Performance Dashboard  [V-1.03]")
 
 # --- Carregar dados ---
 df = load_data(selected_snapshot)
