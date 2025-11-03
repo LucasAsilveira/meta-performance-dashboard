@@ -107,6 +107,26 @@ print(f"✅ Merge geral concluído")
 print(f" - df_meta: {len(df_meta)} linhas")
 print(f" - df_final: {len(df_final)} linhas")
 
+# ==============================================================================
+# NOVO: Modificar coluna 'carteira' para indicar System Price
+# ==============================================================================
+print("\n🔧 Ajustando coluna 'carteira' para System Price...")
+
+# Garantir que a coluna has_system_price seja booleana para a comparação
+# Preencher valores nulos com False (caso o merge não encontre correspondência)
+df_final['has_system_price'] = df_final['has_system_price'].fillna(False)
+
+# Aplicar a modificação usando np.where para eficiência
+# Se has_system_price for True, adiciona '_sys-price', senão mantém o original
+df_final['carteira'] = np.where(
+    df_final['has_system_price'] == True,
+    df_final['carteira'] + '_sys-price',
+    df_final['carteira']
+)
+
+print("✅ Coluna 'carteira' ajustada.")
+
+
 # %%
 # Reordenar colunas
 colunas_ordenadas = [

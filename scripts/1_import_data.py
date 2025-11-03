@@ -119,19 +119,27 @@ FROM registros_do_dia
 WHERE rn = 1;
 """
 
-# Query 3: Localização
+# Query 3: Localização e Status de Preço
 query_location = """
-SELECT  
-  id_seazone as listing,
-  MAX(IF(group_type = 'Carteira', group_name, NULL)) AS carteira,
-  MAX(IF(group_type = 'Estado', group_name, NULL)) AS estado,
-  MAX(IF(group_type = 'Cidade', group_name, NULL)) AS cidade,
-  MAX(IF(group_type = 'Bairro', group_name, NULL)) AS Bairro
-FROM `data-resources-448418.inputdata.setup_groups` 
-WHERE 
-  group_type IN ('Carteira', 'Estado', 'Cidade', 'Bairro')
-  AND state = 'current'
-GROUP BY id_seazone;
+SELECT 
+  location.*, 
+  asp.id_seazone IS NOT NULL AS has_system_price
+FROM
+(
+  SELECT  
+    id_seazone as listing,
+    MAX(IF(group_type = 'Carteira', group_name, NULL)) AS carteira,
+    MAX(IF(group_type = 'Estado', group_name, NULL)) AS estado,
+    MAX(IF(group_type = 'Cidade', group_name, NULL)) AS cidade,
+    MAX(IF(group_type = 'Bairro', group_name, NULL)) AS Bairro
+  FROM `data-resources-448418.inputdata.setup_groups` 
+  WHERE 
+    group_type IN ('Carteira', 'Estado', 'Cidade', 'Bairro')
+    AND state = 'current'
+  GROUP BY id_seazone
+) AS location
+LEFT JOIN `data-resources-448418.system_price.system_price_listings` AS asp 
+  ON (location.listing = asp.id_seazone);
 """
 
 # Query 4: Preço Mínimo (Pmin)
