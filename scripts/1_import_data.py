@@ -149,7 +149,7 @@ SELECT
     n_dates_special_price
 FROM "auditfatgoaldata-fkjh3fcvp0ed"."seazone_data"
 WHERE 
-    year_month = '2025-10' 
+    year_month = '2025-11' 
     and date_trunc('day', acquisition_date) >= current_date
 """
 
